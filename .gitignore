@@ -1,0 +1,12 @@
+.venv
+.ipynb*
+.creds/**
+data/
+.DS_Store
+package-lock.json
+node_modules
+cdk.context.json
+.idea
+**/.env
+**/template**
+**/__pycache__/**
