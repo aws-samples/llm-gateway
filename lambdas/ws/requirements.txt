@@ -1,7 +1,7 @@
 boto3==1.28.58
 pytest==7.2.1
 websockets==10.4
-langchain==0.0.315
+langchain==0.0.329
 opensearch-py==2.2.0
 pandas==1.5.3
 requests_aws4auth
