@@ -198,7 +198,7 @@ export class LlmGatewayStack extends cdk.Stack {
     if (this.useApiKey) {
       // Create an API Key
       const apiKey = new apigw.ApiKey(this, "ApiKey", {
-        apiKeyName: "api-key",
+        apiKeyName: this.stackPrefix + "ApiKey",
       });
       // Add usage plan and associate the API Key
       const usagePlan = new apigw.UsagePlan(this, "UsagePlan", {
@@ -242,7 +242,7 @@ export class LlmGatewayStack extends cdk.Stack {
     for (const modelKey of Object.keys(bedrockModels)) {
       // It's more secure for each lambda to have its own role, despite the clutter.
       const lambdaRole = this.createLlmGatewayLambdaRole(
-        this.stackName + "RestLambda" + modelKey,
+        "RestLambda" + modelKey,
         api.restApiId,
         chatHistoryTable
       );
@@ -350,7 +350,7 @@ export class LlmGatewayStack extends cdk.Stack {
     );
 
     const lambdaRole = this.createLlmGatewayLambdaRole(
-      this.stackName + "WebsocketLambda",
+      "WebsocketLambda",
       api.apiId,
       chatHistoryTable
     );
