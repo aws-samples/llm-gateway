@@ -13,7 +13,7 @@ The difference between these 2 options is discussed in more detail below.
 This demo video shows an LLM chatbot powered by the AWS LLM Gateway and Bedrock Streaming. 
 The chatbot in this demo helps mobile network technicians summarize information about network outages, using data fetched from a (No)SQL or vector database.
 
-![Demo of Bedrock Streaming](./media/streaming_demo.mov)
+![Demo of Bedrock Streaming](./media/streaming_demo.gif)
 
 ## How to deploy the backend
 
