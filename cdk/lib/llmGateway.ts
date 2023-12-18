@@ -155,6 +155,7 @@ export class LlmGatewayStack extends cdk.Stack {
 
   configureVpcParams(): object {
     if (Boolean(this.vpc) && Boolean(this.vpcSubnets) && Boolean(this.vpcSecurityGroup)) {
+      console.log("You have configured VPC usage for your Lambdas.\nNote that as of 2023-Dec-18, *API Gateway for WebSockets DOES NOT PROVIDE SUPPORT FOR VPC FEATURES*.\nIf you are configuring a VPC for API Gateway for a REST API, you can ignore this message.")
       return {
         vpc: this.vpc,
         vpcSubnets: { subnets: this.vpcSubnets },
