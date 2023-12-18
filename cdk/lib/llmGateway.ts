@@ -1,35 +1,19 @@
-/**
- * Copyright 2023 Amazon.com, Inc. and its affiliates. All Rights Reserved.
- *
- * Licensed under the Amazon Software License (the "License").
- * You may not use this file except in compliance with the License.
- * A copy of the License is located at
- *
- *   http://aws.amazon.com/asl/
- *
- * or in the "license" file accompanying this file. This file is distributed
- * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
- * express or implied. See the License for the specific language governing
- * permissions and limitations under the License.
- */
-
 import * as apigw from "aws-cdk-lib/aws-apigateway";
 import * as apigwv2 from "@aws-cdk/aws-apigatewayv2-alpha";
-import { WebSocketLambdaIntegration } from "@aws-cdk/aws-apigatewayv2-integrations-alpha";
 import * as cdk from "aws-cdk-lib";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
-import * as ecr from "aws-cdk-lib/aws-ecr";
-import * as iam from "aws-cdk-lib/aws-iam";
-import * as wafv2 from "aws-cdk-lib/aws-wafv2";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
-import * as logs from "aws-cdk-lib/aws-logs";
-import * as lambda from "aws-cdk-lib/aws-lambda";
-import * as path from "path";
-import { Construct } from "constructs";
+import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as fs from "fs";
-// Local
+import * as iam from "aws-cdk-lib/aws-iam";
+import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as logs from "aws-cdk-lib/aws-logs";
+import * as path from "path";
+import * as wafv2 from "aws-cdk-lib/aws-wafv2";
+import { Construct } from "constructs";
 import { HttpMethod } from "aws-cdk-lib/aws-events";
+import { WebSocketLambdaIntegration } from "@aws-cdk/aws-apigatewayv2-integrations-alpha";
 
 /* At present, Amazon Bedrock streaming is supported by:
  * - Anthropic Claude
@@ -52,11 +36,11 @@ const bedrockModels = {
   "cohere.command-text-v14": {},
 };
 
-const chatHistoryTableName = "ChatHistory";
 
 export class LlmGatewayStack extends cdk.Stack {
   stackPrefix = "LlmGateway";
   embeddingsModel = "amazon.titan-embed-text-v1";
+  chatHistoryTableName = "ChatHistory";
 
   // Environment variables
   defaultMaxTokens = String(process.env.DEFAULT_MAX_TOKENS || 4096);
@@ -198,7 +182,7 @@ export class LlmGatewayStack extends cdk.Stack {
     if (this.useApiKey) {
       // Create an API Key
       const apiKey = new apigw.ApiKey(this, "ApiKey", {
-        apiKeyName: "api-key",
+        apiKeyName: this.stackPrefix + "ApiKey",
       });
       // Add usage plan and associate the API Key
       const usagePlan = new apigw.UsagePlan(this, "UsagePlan", {
@@ -242,7 +226,7 @@ export class LlmGatewayStack extends cdk.Stack {
     for (const modelKey of Object.keys(bedrockModels)) {
       // It's more secure for each lambda to have its own role, despite the clutter.
       const lambdaRole = this.createLlmGatewayLambdaRole(
-        this.stackName + "RestLambda" + modelKey,
+        "RestLambda" + modelKey,
         api.restApiId,
         chatHistoryTable
       );
@@ -252,7 +236,7 @@ export class LlmGatewayStack extends cdk.Stack {
         code: lambda.DockerImageCode.fromEcr(bedrockEcr, { tag: "latest" }),
         role: lambdaRole,
         environment: {
-          CHAT_HISTORY_TABLE_NAME: chatHistoryTableName,
+          CHAT_HISTORY_TABLE_NAME: this.chatHistoryTableName,
           DEFAULT_TEMP: this.defaultTemp,
           DEFAULT_MAX_TOKENS: this.defaultMaxTokens,
           REGION: this.regionValue,
@@ -278,7 +262,7 @@ export class LlmGatewayStack extends cdk.Stack {
       const authTypes = apigw.AuthorizationType;
       const authType = this.hasIamAuth ? authTypes.IAM : authTypes.NONE;
       resource.addMethod("POST", integration, {
-        authorizationType: apigw.AuthorizationType.IAM,
+        authorizationType: authType,
         apiKeyRequired: false,
         requestValidator: new apigw.RequestValidator(
           this,
@@ -291,23 +275,6 @@ export class LlmGatewayStack extends cdk.Stack {
         ),
         requestModels: {
           "application/json": greetModel,
-        },
-      });
-
-      const lambdaUrl = fn.addFunctionUrl({
-        authType: lambda.FunctionUrlAuthType.AWS_IAM,
-        cors: {
-          allowedOrigins: ["*"],
-          allowedHeaders: [
-            "Content-Type",
-            "X-Amz-Date",
-            "Authorization",
-            "X-Api-Key",
-            "X-Amz-Security-Token",
-            "X-Amz-User-Agent",
-          ],
-          allowedMethods: [HttpMethod.POST],
-          allowCredentials: true,
         },
       });
     }
@@ -350,7 +317,7 @@ export class LlmGatewayStack extends cdk.Stack {
     );
 
     const lambdaRole = this.createLlmGatewayLambdaRole(
-      this.stackName + "WebsocketLambda",
+      "WebsocketLambda",
       api.apiId,
       chatHistoryTable
     );
@@ -363,7 +330,7 @@ export class LlmGatewayStack extends cdk.Stack {
         code: lambda.DockerImageCode.fromEcr(bedrockEcr, { tag: "latest" }),
         role: lambdaRole,
         environment: {
-          CHAT_HISTORY_TABLE_NAME: chatHistoryTableName,
+          CHAT_HISTORY_TABLE_NAME: this.chatHistoryTableName,
           WEBSOCKET_CONNECTIONS_TABLE_NAME: websocketConnectionsTable.tableName,
           DEFAULT_TEMP: this.defaultTemp,
           DEFAULT_MAX_TOKENS: this.defaultMaxTokens,
@@ -426,12 +393,12 @@ export class LlmGatewayStack extends cdk.Stack {
 
     // Create a chat history database.
     const chatHistoryTable = this.createSecureDdbTable(
-      chatHistoryTableName,
+      this.chatHistoryTableName,
       "id"
     );
 
     if (process.env.API_GATEWAY_TYPE == "rest") {
-      // Assuming you have an existing ECR repository
+      // Assuming you have an existing ECR repository.
       const ecrRepo = ecr.Repository.fromRepositoryName(
         this,
         this.restEcrRepoName!,
@@ -440,7 +407,7 @@ export class LlmGatewayStack extends cdk.Stack {
       const api = this.createRestApi(ecrRepo, chatHistoryTable);
 
     } else if (process.env.API_GATEWAY_TYPE == "websocket") {
-      // Assuming you have an existing ECR repository
+      // Assuming you have an existing ECR repository.
       const ecrRepo = ecr.Repository.fromRepositoryName(
         this,
         this.wsEcrRepoName!,
