@@ -8,6 +8,13 @@ This project allows users to deploy either a standard REST API, *or* a WebSocket
 
 The difference between these 2 options is discussed in more detail below.
 
+## Demo
+
+This demo video shows an LLM chatbot powered by the AWS LLM Gateway and Bedrock Streaming. 
+The chatbot in this demo helps mobile network technicians summarize information about network outages, using data fetched from a (No)SQL or vector database.
+
+![Demo of Bedrock Streaming](./media/streaming_demo.mov)
+
 ## How to deploy the backend
 
 ### REST API
