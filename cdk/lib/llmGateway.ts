@@ -67,6 +67,9 @@ export class LlmGatewayStack extends cdk.Stack {
   useApiKey = String(process.env.API_GATEWAY_USE_API_KEY).toLowerCase() == "true";
   wsEcrRepoName = process.env.ECR_WEBSOCKET_REPOSITORY;
   opensearchDomainEndpoint = process.env.OPENSEARCH_DOMAIN_ENDPOINT || "";
+  vpc = process.env.VPC || null;
+  vpcSubnets = process.env.VPC_SUBNETS || null;
+  vpcSecurityGroup = process.env.VPC_SECURITY_GROUP || null;
 
   tryGetParameter(parameterName: string, defaultValue: any = null) {
     const parameter = this.node.tryFindChild(parameterName) as cdk.CfnParameter;
@@ -148,6 +151,17 @@ export class LlmGatewayStack extends cdk.Stack {
         }),
       },
     });
+  }
+
+  configureVpcParams(): object {
+    if (Boolean(this.vpc) && Boolean(this.vpcSubnets) && Boolean(this.vpcSecurityGroup)) {
+      return {
+        vpc: this.vpc,
+        vpcSubnets: { subnets: this.vpcSubnets },
+        securityGroups: [this.vpcSecurityGroup],
+      }
+    }
+    return {}
   }
 
   createRestApi(bedrockEcr: ecr.IRepository, chatHistoryTable: dynamodb.Table) {
@@ -247,7 +261,9 @@ export class LlmGatewayStack extends cdk.Stack {
         chatHistoryTable
       );
 
+
       // Create Lambda function from the ECR image.
+      const vpcParams = this.configureVpcParams();
       const fn = new lambda.DockerImageFunction(this, modelKey, {
         code: lambda.DockerImageCode.fromEcr(bedrockEcr, { tag: "latest" }),
         role: lambdaRole,
@@ -263,9 +279,7 @@ export class LlmGatewayStack extends cdk.Stack {
         },
         timeout: cdk.Duration.minutes(15),
         memorySize: 512,
-        // vpc: vpc,
-        // vpcSubnets: { subnets: subnets },
-        // securityGroups: [securityGroup],
+        ...vpcParams,
       });
 
       // Define the integration between API Gateway and Lambda
@@ -356,6 +370,7 @@ export class LlmGatewayStack extends cdk.Stack {
     );
 
     // Create Lambda function from the ECR image
+    const vpcParams = this.configureVpcParams();
     const fn = new lambda.DockerImageFunction(
       this,
       "LlmGatewayWebsocketHandler",
@@ -375,9 +390,7 @@ export class LlmGatewayStack extends cdk.Stack {
         },
         timeout: cdk.Duration.minutes(15),
         memorySize: 512,
-        // vpc: vpc,
-        // vpcSubnets: { subnets: subnets },
-        // securityGroups: [securityGroup],
+        ...vpcParams,
       }
     );
 
