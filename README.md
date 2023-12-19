@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This project provides sample code and CDK for deploying APIs which provide a secure and scalable interface with Amazon Bedrock.
+This project provides sample code and CDK for deploying APIs which provide a secure and scalable interface with Amazon Bedrock, based on [this blog post](https://aws.amazon.com/blogs/machine-learning/create-a-generative-ai-gateway-to-allow-secure-and-compliant-consumption-of-foundation-models/)
 
 This project allows users to deploy either a standard REST API, *or* a WebSocket API which supports streaming responses from Amazon Bedrock.
 
