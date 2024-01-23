@@ -95,6 +95,35 @@ REGION_ID="us-east-1"
 # OPENSEARCH_DOMAIN_ENDPOINT=""  # Optional
 ```
 
+## Uploading data for cached question-answer pairs
+
+The LLM Gateway has the ability to immediately respond to questions which have been asked before, by using a cache of question-answer pairs which have been asked before.
+
+This causes a significant reduction in latency for prompts which are sent to the API, and for which that prompt appears in the cache of question-answer pairs.
+
+You can pre-populate this cache by bulk-uploading data to your DynamoDB index.
+
+To do this:
+1. Prepare a JSON file with all the data that you want to upload to DynamoDB.
+    Each data item should be its own JSON object within a top-level JSON list.
+    For example, your `.json` file should look as follows:
+    ```
+    [
+        { pk: pk1, key1: value1, ... },
+        { pk: pk2, key1: value1, ... },
+        { pk: pk3, key1: value1, ... },
+        ...
+    ]
+    ```
+2. Run the script from the project root directory as follows. Please remember that you should have your AWS credentials working from your command line in order for this script to work. You may need to log in or provide environment variables.
+```
+python scripts/bulk_upload_JSON_to_DDB/bulk_upload_JSON_to_DDB.py <path_to_JSON_file> -t <table_name>
+```
+
+For more information, please run this command from the project root directory:
+```
+python scripts/bulk_upload_JSON_to_DDB/bulk_upload_JSON_to_DDB.py
+```
 
 ## REST or WebSockets? What's the difference?
 
@@ -125,6 +154,7 @@ However, it is important to note that as of 2023-Nov-27, WebSocket API Gateways 
 <sup>[1]</sup> Defined as "the time between when a user submits a request, and when they first receive a response from the API"
 
 <sup>[2]</sup> Exceeds the REST API Gateway timeout of 30 seconds
+
 
 ## Security
 See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
