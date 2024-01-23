@@ -95,22 +95,27 @@ REGION_ID="us-east-1"
 # OPENSEARCH_DOMAIN_ENDPOINT=""  # Optional
 ```
 
-## Uploading data for Retrieval Augmented Generation (RAG)
+## Uploading data for cached question-answer pairs
 
-If you want to upload data in bulk to your DynamoDB index, prepare a JSON file with all the data that you want to upload to DynamoDB.
+The LLM Gateway has the ability to immediately respond to questions which have been asked before, by using a cache of question-answer pairs which have been asked before.
 
-Each data item should be its own JSON object within a top-level JSON list.
-For example, your `.json` file should look as follows:
-```
-[
-    { pk: pk1, key1: value1, ... },
-    { pk: pk2, key1: value1, ... },
-    { pk: pk3, key1: value1, ... },
-    ...
-]
-```
+This causes a significant reduction in latency for prompts which are sent to the API, and for which that prompt appears in the cache of question-answer pairs.
 
-You can run the script from the project root directory as follows. Please remember that you should have your AWS credentials working from your command line (you may need to log in or provide environment variables).
+You can pre-populate this cache by bulk-uploading data to your DynamoDB index.
+
+To do this:
+1. Prepare a JSON file with all the data that you want to upload to DynamoDB.
+    Each data item should be its own JSON object within a top-level JSON list.
+    For example, your `.json` file should look as follows:
+    ```
+    [
+        { pk: pk1, key1: value1, ... },
+        { pk: pk2, key1: value1, ... },
+        { pk: pk3, key1: value1, ... },
+        ...
+    ]
+    ```
+2. Run the script from the project root directory as follows. Please remember that you should have your AWS credentials working from your command line in order for this script to work. You may need to log in or provide environment variables.
 ```
 python scripts/bulk_upload_JSON_to_DDB/bulk_upload_JSON_to_DDB.py <path_to_JSON_file> -t <table_name>
 ```
