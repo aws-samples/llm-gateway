@@ -1,5 +1,7 @@
 # AWS LLM Gateway
 
+Project ACTIVE as of Feb 28, 2024
+
 ## Project Overview
 
 This project provides sample code and CDK for deploying APIs which provide a secure and scalable interface with Amazon Bedrock.
