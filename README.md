@@ -155,7 +155,7 @@ However, it is important to note that as of 2023-Nov-27, WebSocket API Gateways 
 
 <sup>[1]</sup> Defined as "the time between when a user submits a request, and when they first receive a response from the API"
 
-<sup>[2]</sup> Exceeds the REST API Gateway timeout of 30 seconds
+<sup>[2]</sup> Exceeds the REST API Gateway timeout of 30 seconds.
 
 
 ## Security
