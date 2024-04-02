@@ -1,6 +1,6 @@
 # AWS LLM Gateway
 
-Project ACTIVE as of Feb 28, 2024
+Project ACTIVE as of Apr 2, 2024
 
 ## Project Overview
 
