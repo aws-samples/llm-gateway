@@ -1,5 +1,5 @@
 from botocore.exceptions import ClientError
-from langchain.chat_models import BedrockChat
+from langchain.chat_models import BedrockChat, ChatOpenAI
 from langchain.embeddings import BedrockEmbeddings
 from langchain.llms import Bedrock
 from langchain.vectorstores import OpenSearchVectorSearch
@@ -135,35 +135,29 @@ def post_to_cache(dynamodb_client, node_id, prompt, responses):
         print("Error saving message to cache:", str(e))
 
 
-def format_bedrock_request(prompt, temperature, max_tokens_to_sample, stop_sequences):
-    bedrock_request = {
-        "prompt": prompt,
-        "temperature": temperature,
-    }
-    if "anthropic" in MODEL:
-        bedrock_request["max_tokens_to_sample"] = max_tokens_to_sample
-        bedrock_request["stop_sequences"] = stop_sequences
-    elif "cohere" in MODEL:
-        bedrock_request["stop_sequences"] = stop_sequences
-    elif "ai21" in MODEL:
-        print(1 + 1)
-    elif "amazon" in MODEL:
-        bedrock_request = {"inputText": prompt}
-    return bedrock_request
-
-
 def append_prompt_to_history(prompt, previous_requests, previous_responses):
     chat = ""
     # Reconstruct the previous conversation, unless this is an embeddings model.
-    if "embed" not in MODEL:
+    if "gpt" in MODEL:
+        messages = []
         for i in range(len(previous_requests)):
             request = previous_requests[i]
             response = ""
             response = previous_responses[i]["completion"]
-            chat = chat + f"\n\nHuman: {request}"
-            chat = chat + f"\n\nAssistant: {response}"
+            messages.append(("human", request))
+            messages.append(("assistant", response))
+        messages.append(("human", prompt))
+        return messages
+    else:
+        if "embed" not in MODEL:
+            for i in range(len(previous_requests)):
+                request = previous_requests[i]
+                response = ""
+                response = previous_responses[i]["completion"]
+                chat = chat + f"\n\nHuman: {request}"
+                chat = chat + f"\n\nAssistant: {response}"
     # Append the most recent prompt to the end of the chat.
-    return chat + f"\n\nHuman: {prompt}. \n\n Assistant:"
+        return chat + f"\n\nHuman: {prompt}. \n\n Assistant:"
 
 
 class Settings:
@@ -190,35 +184,6 @@ class Settings:
         self.chat_id = body.get("chat_id", now().isoformat())
         self.rag_prompt = body.get("rag_prompt", None)
         self.invalidate_cache = body.get("invalidate_cache", "false").lower() == "true"
-
-
-def make_bedrock_request(full_chat, settings):
-    bedrock_request = format_bedrock_request(
-        full_chat,
-        settings.temperature,
-        settings.max_tokens_to_sample,
-        settings.stop_sequences,
-    )
-    payload = json.dumps(bedrock_request)
-    print("bedrock request:", payload)
-
-    # Invoke model, and measure the latency
-    start_time = now()
-    response = settings.bedrock_runtime.invoke_model(
-        modelId=MODEL,
-        contentType="application/json",
-        accept="application/json",
-        body=payload,
-    )
-    end_time = now()
-    bedrock_latency = end_time - start_time
-    print("Bedrock request latency:", bedrock_latency)
-
-    response_body = response.get("body").read()
-    response_body = json.loads(response_body.decode("utf-8"))
-    print("response_body", response_body)
-    return response_body
-
 
 def get_ws_user_name(table, connection_id):
     user_name = "guest"
@@ -292,15 +257,22 @@ def handle_message(event, table, connection_id, event_body, apigw_management_cli
 
     settings = Settings(event, session)
 
-    # Create a LangChain BedrockChat to stream the results.
-    llm_chat = BedrockChat(
-        model_id="anthropic.claude-v2",
-        client=settings.bedrock_runtime,
-        model_kwargs={
-            "max_tokens_to_sample": 4096,
-            "temperature": 0.0,
-        },
-    )
+    if MODEL.startswith("gpt"):
+        llm_chat = ChatOpenAI(
+            model_id=MODEL,
+            api_key="YOUR_API_KEY",
+            temperature=0
+        )
+    else:
+        # Create a LangChain BedrockChat to stream the results.
+        llm_chat = BedrockChat(
+            model_id=MODEL,
+            client=settings.bedrock_runtime,
+            model_kwargs={
+                "max_tokens_to_sample": 4096,
+                "temperature": 0.0,
+            },
+        )
 
     # Set up the Websocket connection
     user_name = get_ws_user_name(table, connection_id)
