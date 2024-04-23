@@ -49,6 +49,7 @@ export class LlmGatewayStack extends cdk.Stack {
   regionValue = String(process.env.REGION_ID || "us-east-1");
   restEcrRepoName = process.env.ECR_REST_REPOSITORY;
   modelId = String(process.env.MODEL_ID);
+  apiKey = String(process.env.API_KEY)
   useApiKey = String(process.env.API_GATEWAY_USE_API_KEY).toLowerCase() == "true";
   wsEcrRepoName = process.env.ECR_WEBSOCKET_REPOSITORY;
   opensearchDomainEndpoint = process.env.OPENSEARCH_DOMAIN_ENDPOINT || "";
@@ -352,7 +353,8 @@ export class LlmGatewayStack extends cdk.Stack {
           DEFAULT_TEMP: this.defaultTemp,
           DEFAULT_MAX_TOKENS: this.defaultMaxTokens,
           REGION: this.regionValue,
-          MODEL: this.modelId, // TODO: Allow this to be anything.
+          MODEL: this.modelId,
+          API_KEY: this.apiKey,
           EMBEDDINGS_MODEL: this.embeddingsModel,
           OPENSEARCH_DOMAIN_ENDPOINT: this.opensearchDomainEndpoint,
           OPENSEARCH_INDEX: "llm-rag-hackathon",

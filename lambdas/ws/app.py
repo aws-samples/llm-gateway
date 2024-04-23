@@ -27,7 +27,7 @@ DEFAULT_TEMP = float(os.environ.get("DEFAULT_TEMP", 0.0))
 # Model selection.
 EMBEDDINGS_MODEL = os.environ.get("EMBEDDINGS_MODEL")
 MODEL = os.environ.get("MODEL", "anthropic.claude-v2")
-
+API_KEY = os.environ.get("API_KEY", "")
 ## END ENVIORNMENT VARIABLES ###################################################
 ## BEGIN NETWORK ANALYSIS ######################################################
 
@@ -260,7 +260,7 @@ def handle_message(event, table, connection_id, event_body, apigw_management_cli
     if MODEL.startswith("gpt"):
         llm_chat = ChatOpenAI(
             model_id=MODEL,
-            api_key="YOUR_API_KEY",
+            api_key=API_KEY,
             temperature=0
         )
     else:
