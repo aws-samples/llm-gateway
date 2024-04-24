@@ -1,8 +1,9 @@
 from botocore.exceptions import ClientError
-from langchain.chat_models import BedrockChat
-from langchain.embeddings import BedrockEmbeddings
-from langchain.llms import Bedrock
-from langchain.vectorstores import OpenSearchVectorSearch
+from langchain_community.chat_models import BedrockChat
+from langchain_openai import ChatOpenAI
+from langchain_community.embeddings import BedrockEmbeddings
+from langchain_community.llms import Bedrock
+from langchain_community.vectorstores import OpenSearchVectorSearch
 from multiprocessing import Process, Pipe
 from opensearchpy import RequestsHttpConnection, AWSV4SignerAuth
 from sqlalchemy import create_engine
@@ -27,7 +28,7 @@ DEFAULT_TEMP = float(os.environ.get("DEFAULT_TEMP", 0.0))
 # Model selection.
 EMBEDDINGS_MODEL = os.environ.get("EMBEDDINGS_MODEL")
 MODEL = os.environ.get("MODEL", "anthropic.claude-v2")
-
+API_KEY = os.environ.get("API_KEY", "")
 ## END ENVIORNMENT VARIABLES ###################################################
 ## BEGIN NETWORK ANALYSIS ######################################################
 
@@ -135,35 +136,29 @@ def post_to_cache(dynamodb_client, node_id, prompt, responses):
         print("Error saving message to cache:", str(e))
 
 
-def format_bedrock_request(prompt, temperature, max_tokens_to_sample, stop_sequences):
-    bedrock_request = {
-        "prompt": prompt,
-        "temperature": temperature,
-    }
-    if "anthropic" in MODEL:
-        bedrock_request["max_tokens_to_sample"] = max_tokens_to_sample
-        bedrock_request["stop_sequences"] = stop_sequences
-    elif "cohere" in MODEL:
-        bedrock_request["stop_sequences"] = stop_sequences
-    elif "ai21" in MODEL:
-        print(1 + 1)
-    elif "amazon" in MODEL:
-        bedrock_request = {"inputText": prompt}
-    return bedrock_request
-
-
 def append_prompt_to_history(prompt, previous_requests, previous_responses):
     chat = ""
     # Reconstruct the previous conversation, unless this is an embeddings model.
-    if "embed" not in MODEL:
+    if "gpt" in MODEL:
+        messages = []
         for i in range(len(previous_requests)):
             request = previous_requests[i]
             response = ""
             response = previous_responses[i]["completion"]
-            chat = chat + f"\n\nHuman: {request}"
-            chat = chat + f"\n\nAssistant: {response}"
+            messages.append(("human", request))
+            messages.append(("assistant", response))
+        messages.append(("human", prompt))
+        return messages
+    else:
+        if "embed" not in MODEL:
+            for i in range(len(previous_requests)):
+                request = previous_requests[i]
+                response = ""
+                response = previous_responses[i]["completion"]
+                chat = chat + f"\n\nHuman: {request}"
+                chat = chat + f"\n\nAssistant: {response}"
     # Append the most recent prompt to the end of the chat.
-    return chat + f"\n\nHuman: {prompt}. \n\n Assistant:"
+        return chat + f"\n\nHuman: {prompt}. \n\n Assistant:"
 
 
 class Settings:
@@ -191,39 +186,11 @@ class Settings:
         self.rag_prompt = body.get("rag_prompt", None)
         self.invalidate_cache = body.get("invalidate_cache", "false").lower() == "true"
 
-
-def make_bedrock_request(full_chat, settings):
-    bedrock_request = format_bedrock_request(
-        full_chat,
-        settings.temperature,
-        settings.max_tokens_to_sample,
-        settings.stop_sequences,
-    )
-    payload = json.dumps(bedrock_request)
-    print("bedrock request:", payload)
-
-    # Invoke model, and measure the latency
-    start_time = now()
-    response = settings.bedrock_runtime.invoke_model(
-        modelId=MODEL,
-        contentType="application/json",
-        accept="application/json",
-        body=payload,
-    )
-    end_time = now()
-    bedrock_latency = end_time - start_time
-    print("Bedrock request latency:", bedrock_latency)
-
-    response_body = response.get("body").read()
-    response_body = json.loads(response_body.decode("utf-8"))
-    print("response_body", response_body)
-    return response_body
-
-
 def get_ws_user_name(table, connection_id):
     user_name = "guest"
     try:
         item_response = table.get_item(Key={"connection_id": connection_id})
+        print(f'item_response: {item_response}')
         user_name = item_response["Item"]["user_name"]
         print("Got user name", user_name)
     except ClientError:
@@ -292,15 +259,22 @@ def handle_message(event, table, connection_id, event_body, apigw_management_cli
 
     settings = Settings(event, session)
 
-    # Create a LangChain BedrockChat to stream the results.
-    llm_chat = BedrockChat(
-        model_id="anthropic.claude-v2",
-        client=settings.bedrock_runtime,
-        model_kwargs={
-            "max_tokens_to_sample": 4096,
-            "temperature": 0.0,
-        },
-    )
+    if MODEL.startswith("gpt"):
+        llm_chat = ChatOpenAI(
+            model=MODEL,
+            api_key=API_KEY,
+            temperature=0
+        )
+    else:
+        # Create a LangChain BedrockChat to stream the results.
+        llm_chat = BedrockChat(
+            model_id=MODEL,
+            client=settings.bedrock_runtime,
+            model_kwargs={
+                "max_tokens_to_sample": 4096,
+                "temperature": 0.0,
+            },
+        )
 
     # Set up the Websocket connection
     user_name = get_ws_user_name(table, connection_id)
@@ -504,6 +478,7 @@ def lambda_handler(event, context):
     response = {"statusCode": 200}
     if route_key == "$connect":
         user_name = event.get("queryStringParameters", {"name": "guest"}).get("name")
+        print(f'username: {user_name}')
         response["statusCode"] = handle_connect(user_name, table, connection_id)
     elif route_key == "$disconnect":
         response["statusCode"] = handle_disconnect(table, connection_id)
