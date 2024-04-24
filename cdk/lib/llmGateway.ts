@@ -348,7 +348,7 @@ export class LlmGatewayStack extends cdk.Stack {
         code: lambda.DockerImageCode.fromEcr(bedrockEcr, { tag: "latest" }),
         role: lambdaRole,
         environment: {
-          CHAT_HISTORY_TABLE_NAME: this.chatHistoryTableName,
+          CHAT_HISTORY_TABLE_NAME: chatHistoryTable.tableName,
           WEBSOCKET_CONNECTIONS_TABLE_NAME: websocketConnectionsTable.tableName,
           DEFAULT_TEMP: this.defaultTemp,
           DEFAULT_MAX_TOKENS: this.defaultMaxTokens,

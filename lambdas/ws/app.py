@@ -1,8 +1,9 @@
 from botocore.exceptions import ClientError
-from langchain.chat_models import BedrockChat, ChatOpenAI
-from langchain.embeddings import BedrockEmbeddings
-from langchain.llms import Bedrock
-from langchain.vectorstores import OpenSearchVectorSearch
+from langchain_community.chat_models import BedrockChat
+from langchain_openai import ChatOpenAI
+from langchain_community.embeddings import BedrockEmbeddings
+from langchain_community.llms import Bedrock
+from langchain_community.vectorstores import OpenSearchVectorSearch
 from multiprocessing import Process, Pipe
 from opensearchpy import RequestsHttpConnection, AWSV4SignerAuth
 from sqlalchemy import create_engine
@@ -189,6 +190,7 @@ def get_ws_user_name(table, connection_id):
     user_name = "guest"
     try:
         item_response = table.get_item(Key={"connection_id": connection_id})
+        print(f'item_response: {item_response}')
         user_name = item_response["Item"]["user_name"]
         print("Got user name", user_name)
     except ClientError:
@@ -259,7 +261,7 @@ def handle_message(event, table, connection_id, event_body, apigw_management_cli
 
     if MODEL.startswith("gpt"):
         llm_chat = ChatOpenAI(
-            model_id=MODEL,
+            model=MODEL,
             api_key=API_KEY,
             temperature=0
         )
@@ -476,6 +478,7 @@ def lambda_handler(event, context):
     response = {"statusCode": 200}
     if route_key == "$connect":
         user_name = event.get("queryStringParameters", {"name": "guest"}).get("name")
+        print(f'username: {user_name}')
         response["statusCode"] = handle_connect(user_name, table, connection_id)
     elif route_key == "$disconnect":
         response["statusCode"] = handle_disconnect(table, connection_id)
