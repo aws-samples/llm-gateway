@@ -4,10 +4,11 @@ from openai import OpenAI
 import websockets
 import json
 import asyncio
+import logging
 
 client = OpenAI()
 uri = "wss://8b9ldf1092.execute-api.us-east-1.amazonaws.com/prod"
-
+logging.basicConfig(level=logging.INFO)
 # Display the chat history
 def create_chat_area(chat_history):
     for chat in chat_history:
@@ -15,21 +16,27 @@ def create_chat_area(chat_history):
         with st.chat_message(role):
             st.write(chat['content'])
 
+async def ensure_websocket_connection():
+    if 'websocket' not in st.session_state or st.session_state.websocket.closed:
+        st.session_state.websocket = await websockets.connect(uri)
+    return st.session_state.websocket
+
 async def chat(messages):
-    async with websockets.connect(uri) as socket:
-        message = {"action": "sendmessage", "prompt": messages}
-        if st.session_state.chat_id:
-            message["chat_id"] = st.session_state.chat_id
-        await socket.send(json.dumps(message))
-        while True:
-            response = await socket.recv()
-            response_json = json.loads(response)
-            completion = response_json.get("completion")
-            st.session_state.chat_id = response_json.get("chat_id")
-            if completion:
-                yield completion
-            if response_json.get("has_more_messages") == "false":
-                break
+    socket = await ensure_websocket_connection()
+    message = {"action": "sendmessage", "prompt": messages}
+    if st.session_state.chat_id:
+        message["chat_id"] = st.session_state.chat_id
+    await socket.send(json.dumps(message))
+    while True:
+        response = await socket.recv()
+        response_json = json.loads(response)
+        print(f'response_json: {response_json}')
+        completion = response_json.get("completion")
+        st.session_state.chat_id = response_json.get("chat_id")
+        if completion:
+            yield completion
+        if response_json.get("has_more_messages") == "false":
+            break
 
 # Main function to run the Streamlit app
 def main():
@@ -69,20 +76,21 @@ def run_chat_interface():
     if clear_button:
         st.session_state.chat_history = []
         st.session_state.chat_id = None
-        st.experimental_rerun()
+        st.rerun()
 
     # Handle user input and generate assistant response
     if user_input or st.session_state.streaming:
         process_user_input(user_input)
 
 def process_user_input(user_input):
+    logging.info(f'user_input: {user_input}')
     if user_input:
         st.session_state.chat_history.append({"role": "user", "content": user_input})
         gpt_answer = chat(user_input)
         st.session_state.generator = gpt_answer
         st.session_state.streaming = True
         st.session_state.chat_history.append({"role": "assistant", "content": ''})
-        st.experimental_rerun()
+        st.rerun()
     else:
         asyncio.run(update_assistant_response())
 
@@ -91,12 +99,17 @@ async def update_assistant_response():
         generator = st.session_state.generator
         while True:
             chunk = await anext(generator)
+            logging.info(f'chunk: {chunk}')
             st.session_state.chat_history[-1]["content"] += chunk
+            st.rerun()
     except StopAsyncIteration:
+        logging.info("StopAsyncIteration")
         st.session_state.streaming = False
-    st.experimental_rerun()
+    
 
 
 
 if __name__ == '__main__':
+    if 'websocket' not in st.session_state:
+        asyncio.run(ensure_websocket_connection())  # Ensure WebSocket connection on start
     main()
