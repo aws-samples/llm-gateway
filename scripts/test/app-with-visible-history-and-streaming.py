@@ -26,7 +26,7 @@ def sync_generator(sync_queue):
         yield item
 
 # Title displayed on the streamlit web app
-st.title(f""":rainbow[Bedrock Streaming API Sample]""")
+st.title(f""":rainbow[LLM Gateway API Sample]""")
 # configuring values for session state
 if "messages" not in st.session_state:
     st.session_state.messages = []
