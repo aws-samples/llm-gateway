@@ -1,3 +1,5 @@
+import csv
+
 # Set up the regex matches within the pattern
 ANY_WORD = "([a-zA-Z]+)"
 UP_TO_3_DIGITS = "([\d]{1,3})"
@@ -6,6 +8,8 @@ UP_TO_3_PUNCTUATION = f"([{PUNCTUATION}]{1,3}+(?=(.?.?.?)*))"
 ANY_NON_ASCII_CHAR = "(\\\\x[0-9a-fA-F]{2})"
 
 PATTERN = f"{ANY_WORD}|{UP_TO_3_DIGITS}|{ANY_NON_ASCII_CHAR}|{UP_TO_3_PUNCTUATION}"
+
+COST_DB = "data/cost_db.csv"
 
 
 def get_estimated_tokens(s: str) -> int:
@@ -37,3 +41,39 @@ def lambda_handler(event, context):
         "statusCode": 200,
         "body": json.dumps(response)
     }
+
+
+def estimate_cost(
+    model: str,
+    region: str,
+    type_: str,
+    string: str,
+    use_cache:bool=False,
+) -> float:
+    if type_ not in ["input", "output"]:
+        raise Exception("`type_` must be one of [\"input\", \"output\"]")
+
+    key = ",".join([model, region, type_])
+
+    if use_cache:  # Skip the DDB step for better cost / time performance
+        with open(COST_DB) as f:
+            reader = csv.DictReader(f)
+            costs_dict = {",".join([k1,k3,k2]): v for (k1, k2, k3, v) in reader}
+
+            cost_per_k_tokens = costs_dict.get(key)
+
+            if not cost_per_k_tokens:
+                raise Exception(
+                    f"Could not find ({model}, {region}, {type_}) in cost DB."
+                )
+
+            cost_per_token = cost_per_k_tokens / 1000
+    else:  # Lookup in DDB
+        raise NotImplemented()
+
+    n_tokens = len(get_estimated_tokens(string))
+
+    return cost_per_token * n_tokens
+
+
+estimate_cost("anthropic.claude-haiku", "us-east-1", "input", "the quick brownfox", True)

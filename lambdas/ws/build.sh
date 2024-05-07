@@ -1,6 +1,6 @@
 AWS_REGION="us-east-1"
-AWS_ACCOUNT_ID="235614385815"
-ECR_REPO_NAME="mytestrepo"
+AWS_ACCOUNT_ID="602663024292"
+ECR_REPO_NAME="llm_gateway_ecr"
 
 source create_bedrock_runtime.sh
 aws ecr create-repository --repository-name ${ECR_REPO_NAME}
