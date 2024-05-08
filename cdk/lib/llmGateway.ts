@@ -16,7 +16,7 @@ import { HttpMethod } from "aws-cdk-lib/aws-events";
 import { WebSocketLambdaIntegration } from "@aws-cdk/aws-apigatewayv2-integrations-alpha";
 
 /* At present, Amazon Bedrock streaming is supported by:
- * - Anthropic Claude
+ * - Anthropic Claude 2
  * - AI21 Labs Jurassic-2
  * - Cohere Command
  * - Stability.ai Diffusion
@@ -36,7 +36,6 @@ const bedrockModels = {
   "cohere.command-text-v14": {},
 };
 
-
 export class LlmGatewayStack extends cdk.Stack {
   stackPrefix = "LlmGateway";
   embeddingsModel = "amazon.titan-embed-text-v1";
@@ -45,12 +44,14 @@ export class LlmGatewayStack extends cdk.Stack {
   // Environment variables
   defaultMaxTokens = String(process.env.DEFAULT_MAX_TOKENS || 4096);
   defaultTemp = String(process.env.DEFAULT_TEMP || 0.0);
-  hasIamAuth = String(process.env.API_GATEWAY_USE_IAM_AUTH).toLowerCase() == "true";
+  hasIamAuth =
+    String(process.env.API_GATEWAY_USE_IAM_AUTH).toLowerCase() == "true";
   regionValue = String(process.env.REGION_ID || "us-east-1");
   restEcrRepoName = process.env.ECR_REST_REPOSITORY;
   modelId = String(process.env.MODEL_ID);
-  apiKey = String(process.env.API_KEY)
-  useApiKey = String(process.env.API_GATEWAY_USE_API_KEY).toLowerCase() == "true";
+  apiKey = String(process.env.API_KEY);
+  useApiKey =
+    String(process.env.API_GATEWAY_USE_API_KEY).toLowerCase() == "true";
   wsEcrRepoName = process.env.ECR_WEBSOCKET_REPOSITORY;
   opensearchDomainEndpoint = process.env.OPENSEARCH_DOMAIN_ENDPOINT || "";
   vpc = process.env.VPC || null;
@@ -65,6 +66,60 @@ export class LlmGatewayStack extends cdk.Stack {
       console.error(`Parameter ${parameterName} not found.`);
       return defaultValue;
     }
+  }
+
+  createTokenCountLambda(roleName: string, costTable: dynamodb.Table) {
+    // Cerate the IAM role.
+    const role = new iam.Role(this, roleName, {
+      assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
+      roleName: roleName,
+      inlinePolicies: {
+        LambdaPermissions: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              sid: "HistoryDynamoDBAccess",
+              effect: iam.Effect.ALLOW,
+              actions: [
+                "dynamodb:BatchWriteItem",
+                "dynamodb:DeleteItem",
+                "dynamodb:GetItem",
+                "dynamodb:PutItem",
+                "dynamodb:Query",
+                "dynamodb:Scan",
+                "dynamodb:UpdateItem",
+              ],
+              resources: [costTable.tableArn],
+            }),
+            new iam.PolicyStatement({
+              sid: "WriteToCloudWatchLogs",
+              effect: iam.Effect.ALLOW,
+              actions: [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents",
+              ],
+              resources: ["*"],
+            }),
+          ],
+        }),
+      },
+    });
+
+    // Create Lambda function.
+    const vpcParams = this.configureVpcParams();
+    return new lambda.Function(this, "LlmGatewayTokenCounter", {
+      role: role,
+      runtime: lambda.Runtime.PYTHON_3_12,
+      handler: "app.lambda_handler",
+      code: lambda.Code.fromAsset(
+        path.join(__dirname, "../../lambdas/count_tokens/")
+      ),
+      environment: {
+        COST_TABLE_NAME: costTable.tableName,
+      },
+      timeout: cdk.Duration.minutes(1),
+      ...vpcParams,
+    });
   }
 
   createSecureDdbTable(tableName: string, partitionKeyName: string) {
@@ -140,18 +195,28 @@ export class LlmGatewayStack extends cdk.Stack {
   }
 
   configureVpcParams(): object {
-    if (Boolean(this.vpc) && Boolean(this.vpcSubnets) && Boolean(this.vpcSecurityGroup)) {
-      console.log("You have configured VPC usage for your Lambdas.\nNote that as of 2023-Dec-18, *API Gateway for WebSockets DOES NOT PROVIDE SUPPORT FOR VPC FEATURES*.\nIf you are configuring a VPC for API Gateway for a REST API, you can ignore this message.")
+    if (
+      Boolean(this.vpc) &&
+      Boolean(this.vpcSubnets) &&
+      Boolean(this.vpcSecurityGroup)
+    ) {
+      console.log(
+        "You have configured VPC usage for your Lambdas.\nNote that as of 2023-Dec-18, *API Gateway for WebSockets DOES NOT PROVIDE SUPPORT FOR VPC FEATURES*.\nIf you are configuring a VPC for API Gateway for a REST API, you can ignore this message."
+      );
       return {
         vpc: this.vpc,
         vpcSubnets: { subnets: this.vpcSubnets },
         securityGroups: [this.vpcSecurityGroup],
-      }
+      };
     }
-    return {}
+    return {};
   }
 
-  createRestApi(bedrockEcr: ecr.IRepository, chatHistoryTable: dynamodb.Table) {
+  createRestApi(
+    bedrockEcr: ecr.IRepository,
+    chatHistoryTable: dynamodb.Table,
+    costLambda: lambda.Function
+  ) {
     // Create a CloudWatch Logs Log Group
     const restApiLogGroup = new logs.LogGroup(this, "RestApiLogGroup", {
       retention: logs.RetentionDays.ONE_MONTH, // Adjust as needed.
@@ -239,7 +304,6 @@ export class LlmGatewayStack extends cdk.Stack {
       type: apigw.AuthorizationType.COGNITO,
     });
 
-
     for (const modelKey of Object.keys(bedrockModels)) {
       // It's more secure for each lambda to have its own role, despite the clutter.
       const lambdaRole = this.createLlmGatewayLambdaRole(
@@ -247,7 +311,6 @@ export class LlmGatewayStack extends cdk.Stack {
         api.restApiId,
         chatHistoryTable
       );
-
 
       // Create Lambda function from the ECR image.
       const vpcParams = this.configureVpcParams();
@@ -299,7 +362,8 @@ export class LlmGatewayStack extends cdk.Stack {
 
   createWebsocketApi(
     bedrockEcr: ecr.IRepository,
-    chatHistoryTable: dynamodb.Table
+    chatHistoryTable: dynamodb.Table,
+    costLambda: lambda.Function
   ) {
     const api = new apigwv2.WebSocketApi(this, "LlmGatewayWebsocket");
 
@@ -414,26 +478,34 @@ export class LlmGatewayStack extends cdk.Stack {
       "id"
     );
 
+    // Create a table for storing costs of using different LLMs.
+    const costTable = this.createSecureDdbTable("CostTable", "id");
+    const costLambda = this.createTokenCountLambda("CostLambda", costTable);
+
     if (process.env.API_GATEWAY_TYPE == "rest") {
       // Assuming you have an existing ECR repository.
       const ecrRepo = ecr.Repository.fromRepositoryName(
         this,
         this.restEcrRepoName!,
-        this.restEcrRepoName!,
+        this.restEcrRepoName!
       );
-      const api = this.createRestApi(ecrRepo, chatHistoryTable);
-
+      const api = this.createRestApi(ecrRepo, chatHistoryTable, costLambda);
     } else if (process.env.API_GATEWAY_TYPE == "websocket") {
       // Assuming you have an existing ECR repository.
       const ecrRepo = ecr.Repository.fromRepositoryName(
         this,
         this.wsEcrRepoName!,
-        this.wsEcrRepoName!,
+        this.wsEcrRepoName!
       );
-      const api = this.createWebsocketApi(ecrRepo, chatHistoryTable);
-
+      const api = this.createWebsocketApi(
+        ecrRepo,
+        chatHistoryTable,
+        costLambda
+      );
     } else {
-      throw Error(`Environment variable "API_GATEWAY_TYPE" must be set to either "rest" or "websocket"`)
+      throw Error(
+        `Environment variable "API_GATEWAY_TYPE" must be set to either "rest" or "websocket"`
+      );
     }
   }
 }
