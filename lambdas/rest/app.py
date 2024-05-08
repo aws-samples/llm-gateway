@@ -15,6 +15,7 @@ DEFAULT_TEMP = float(os.environ.get("DEFAULT_TEMP", 0.2))
 DEFAULT_LANGCHAIN_USE = bool(os.environ.get("DEFAULT_LANGCHAIN_USE", False))
 MODEL = os.environ.get("MODEL", "anthropic.claude-v2")  # amazon.titan-tg1-large
 REGION = os.environ.get("REGION", "us-west-2")
+COUNT_TOKENS_LAMBDA = os.environ.get("COUNT_TOKENS_LAMBDA")
 
 # Specify the local Bedrock installation location
 session = boto3.Session()
@@ -40,14 +41,21 @@ def format_bedrock_request(prompt, temperature, max_tokens_to_sample, stop_seque
     return bedrock_request
 
 
+def collect_metrics(s):
+    return {}
+    raise NotImplementedError()
+
+    return response
+
+
 def lambda_handler(event, context):
     print("event:", event)
     print("context:", context)
     # Get config from the request body.
     body = json.loads(event["body"])
     prompt = body["prompt"]
-    model_kwargs = body["parameters"]
     # Set config values from the kwargs found inside the request body.
+    model_kwargs = body["parameters"]
     temperature = model_kwargs.get("temperature", DEFAULT_TEMP)
     stop_sequences = model_kwargs.get("stop_sequences", DEFAULT_STOP_SEQUENCES)
     max_tokens_to_sample = model_kwargs.get("max_tokens_to_sample", DEFAULT_MAX_TOKENS)
@@ -70,13 +78,23 @@ def lambda_handler(event, context):
         body=payload,
     )
 
+    # Collect metrics for the input and output.
+    input_metrics = collect_metrics(prompt)
+    output_metrics = collect_metrics(response)
+    metrics = {
+        "input": input_metrics,
+        "output": output_metrics,
+    }
+
     response_body = response.get("body").read()
     response_body = json.loads(response_body.decode("utf-8"))
 
     print(response_body)
+
     return {
         "statusCode": 200,
         "body": json.dumps(response_body),
+        "metrics": metrics,
         "headers": {
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": "*",

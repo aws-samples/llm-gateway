@@ -1,4 +1,5 @@
 import csv
+import re
 
 # Set up the regex matches within the pattern
 ANY_WORD = "([a-zA-Z]+)"
@@ -28,21 +29,6 @@ def get_estimated_tokens(s: str) -> int:
     return [item for tup in result for item in tup if item]
 
 
-def lambda_handler(event, context):
-    # Get the input string from the event.
-    s = event.get("input", "")
-
-    # Return the JSON response.
-    response = {
-        "ascii_token_estimate": len(get_estimated_tokens(s)),
-        "input_length": len(s)
-    }
-    return {
-        "statusCode": 200,
-        "body": json.dumps(response)
-    }
-
-
 def estimate_cost(
     model: str,
     region: str,
@@ -58,11 +44,19 @@ def estimate_cost(
     if use_cache:  # Skip the DDB step for better cost / time performance
         with open(COST_DB) as f:
             reader = csv.DictReader(f)
-            costs_dict = {",".join([k1,k3,k2]): v for (k1, k2, k3, v) in reader}
+            costs_dict = {}
+            for row in reader:
+                model_name = row["model_name"]
+                type_ = row["type"]
+                region = row["region"]
+                cost = float(row["cost_per_token"])
+
+                costs_dict[",".join([model_name,region,type_])] = cost
 
             cost_per_k_tokens = costs_dict.get(key)
 
             if not cost_per_k_tokens:
+                print(costs_dict)
                 raise Exception(
                     f"Could not find ({model}, {region}, {type_}) in cost DB."
                 )
@@ -76,4 +70,23 @@ def estimate_cost(
     return cost_per_token * n_tokens
 
 
-estimate_cost("anthropic.claude-haiku", "us-east-1", "input", "the quick brownfox", True)
+def lambda_handler(event, context):
+    # Get config from the request body.
+    body = json.loads(event["body"])
+    prompt = body["prompt"]
+    model_kwargs = body["prompt"]
+    model_kwargs = body.get("model")
+    model_kwargs = body.get("region")
+    model_kwargs = body.get("type")
+    model_kwargs = body.get("use_cache", False)
+
+    # Return the JSON response.
+    response = {
+        "cost": estimate_cost(model, region, type_, s, use_cache)
+        "length": len(s),
+        "n_tokens": len(get_estimated_tokens(s)),
+    }
+    return {
+        "statusCode": 200,
+        "body": json.dumps(response)
+    }
