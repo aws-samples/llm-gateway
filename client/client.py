@@ -180,7 +180,7 @@ with right_column:
     st.header("Usage Statistics")
     # Your usage statistics functionality goes here
 
-    user_options = ["Michael Rodriguez's User", "Andrew Young's Amazing App", "Osman Santos's Amazing App"]
+    user_options = ["Oz's User", "Andrew's Amazing App", "Michael's Amazing App"]
     selected_user = st.selectbox("User", user_options)
 
     provider_options = ["Amazon Bedrock", "Azure & OpenAI"]
