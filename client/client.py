@@ -5,8 +5,6 @@ import threading
 import queue
 import websockets
 
-uri = "wss://8b9ldf1092.execute-api.us-east-1.amazonaws.com/prod"
-
 st.set_page_config(layout="wide")
 
 estimated_usage = 0
@@ -180,7 +178,7 @@ with right_column:
     st.header("Usage Statistics")
     # Your usage statistics functionality goes here
 
-    user_options = ["Oz's User", "Andrew's Amazing App", "Michael's Amazing App"]
+    user_options = ["Oz's User", "Andrew's AWS App", "Michael's Azure App"]
     selected_user = st.selectbox("User", user_options)
 
     provider_options = ["Amazon Bedrock", "Azure & OpenAI"]
@@ -188,7 +186,13 @@ with right_column:
 
     if provider == "Amazon Bedrock":
         # Model dropdown
-        model_options = ["Claude 3 Sonnet", "Claude 3 Haiku", "Llama 3", "Amazon Titan"]
+        model_options = [
+            "Claude 3 Sonnet",
+            "Claude 3 Haiku",
+            "Llama 3",
+            "Amazon Titan G1 Express",
+            "Mixtral 8x7B Instruct",
+        ]
         selected_model = st.selectbox("Model", model_options)
     elif provider == "Azure & OpenAI":
         # Model dropdown
@@ -200,7 +204,7 @@ with right_column:
         error_message = "Quota limit exceeded"
         st.subheader(f"LLM Gateway Exception - {error_message}")
     else:
-        st.subheader(f"LLM Gateway Exception - {error_message}")
+        st.subheader(f"Response received")
 
     st.write(f"""
     - Model ID: {selected_model}
