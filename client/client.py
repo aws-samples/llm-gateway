@@ -7,7 +7,6 @@ import websockets
 
 st.set_page_config(layout="wide")
 
-estimated_usage = 0
 quota_limit = 0.0001
 
 ################################################################################
@@ -41,6 +40,13 @@ def get_estimated_tokens(s: str) -> int:
 
     result = re.findall(PATTERN, str(s_encoded)[2:])
     return [item for tup in result for item in tup if item]
+
+
+def has_quota():
+    return not (
+        st.session_state.estimated_usage and
+        st.session_state.estimated_usage > quota_limit
+    )
 
 
 def estimate_cost(
@@ -137,6 +143,8 @@ with main_column:
     # configuring values for session state
     if "messages" not in st.session_state:
         st.session_state.messages = []
+    if "estimated_usage" not in st.session_state:
+        st.session_state.estimated_usage = 0
     # writing the message that is stored in session state
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
@@ -153,25 +161,30 @@ with main_column:
         with st.chat_message("assistant"):
             q = queue.Queue()
 
-            # Update the input metrics.
-            update_metrics(prompt, "input")
+            if has_quota():
+                # Update the input metrics.
+                update_metrics(prompt, "input")
 
-            # Start the background thread
+                # Start the background thread
 
-            thread = threading.Thread(
-                target=bridge, args=(llm_answer_streaming(prompt), q)
-            )
-            thread.start()
-            # making sure there are no messages present when generating the answer
-            message_placeholder = st.empty()
-            # calling the invoke_llm_with_streaming to generate the answer as a generator object, and using
-            # st.write stream to perform the actual streaming of the answer to the front end
-            answer = st.write_stream(sync_generator(q))
+                thread = threading.Thread(
+                    target=bridge, args=(llm_answer_streaming(prompt), q)
+                )
+                thread.start()
+                # making sure there are no messages present when generating the answer
+                message_placeholder = st.empty()
+                # calling the invoke_llm_with_streaming to generate the answer as a generator object, and using
+                # st.write stream to perform the actual streaming of the answer to the front end
+                answer = st.write_stream(sync_generator(q))
+            else:
+                answer = st.write("Quota limit exceeded.")
 
         # appending the final answer to the session state
-        update_metrics(answer, "output")
-        estimated_usage += metrics["input_cost"]
-        estimated_usage += metrics["output_cost"]
+        if has_quota():
+            update_metrics(answer, "output")
+            print(st.session_state.estimated_usage)
+            st.session_state.estimated_usage += metrics["input_cost"]
+            st.session_state.estimated_usage += metrics["output_cost"]
         st.session_state.messages.append({"role": "assistant", "content": answer})
 
 with right_column:
@@ -200,17 +213,21 @@ with right_column:
         selected_model = st.selectbox("Model", model_options)
 
     # Quota limit
-    if estimated_usage > quota_limit:
+    if has_quota():
+        st.subheader(f"Response received")
+    else:  # No quota left.
         error_message = "Quota limit exceeded"
         st.subheader(f"LLM Gateway Exception - {error_message}")
-    else:
-        st.subheader(f"Response received")
 
+    if st.session_state.estimated_usage:
+        estimated_usage_str = '{:8f}'.format(st.session_state.estimated_usage)
+    else:
+        estimated_usage_str = "0"
     st.write(f"""
     - Model ID: {selected_model}
     - User: {selected_user}
     - Quota Plan: Daily
-    - Estimated usage for this period: {str(estimated_usage)[:7]} / {quota_limit} USD
+    - Estimated usage for this period: \$ {estimated_usage_str} / \$ {quota_limit}
     """)
 
     n_input_tokens = metrics["n_input_tokens"]
@@ -221,18 +238,18 @@ with right_column:
     st.write(f"""
     ##### Input metrics:
     - n_tokens: {n_input_tokens}
-    - cost: {input_cost} USD
+    - cost: $ {input_cost}
     """)
 
     st.write(f"""
     ##### Output metrics:
     - n_tokens: {n_output_tokens}
-    - cost: {output_cost} USD
+    - cost: $ {output_cost}
     """)
 
     st.write(f"""
     ##### Combined I/O metrics:
-    - n_tokens: {n_output_tokens + n_input_tokens} USD
-    - cost: {float(output_cost) + float(input_cost)} USD
+    - n_tokens: {n_output_tokens + n_input_tokens}
+    - cost: $ {float(output_cost) + float(input_cost)}
     """)
 
