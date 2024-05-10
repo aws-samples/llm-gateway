@@ -9,6 +9,10 @@ st.set_page_config(layout="wide")
 
 quota_limit = 0.0001
 
+# Initialize the variable
+is_streaming = False
+
+
 ################################################################################
 # BEGIN - Lambda code - This needs to be migrated to the cloud
 ################################################################################
@@ -151,7 +155,7 @@ with main_column:
             st.markdown(message["content"])
 
     # evaluating st.chat_input and determining if a prompt has been input
-    if prompt := st.chat_input("Ask me about anything...and I will STREAM the answer!"):
+    if prompt := st.chat_input("Ask me about anything..."):
         # with the user icon, write the prompt to the front end
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -188,6 +192,9 @@ with main_column:
         st.session_state.messages.append({"role": "assistant", "content": answer})
 
 with right_column:
+    # Control items
+    is_streaming = st.toggle("Stream responses?")
+
     st.header("Usage Statistics")
     # Your usage statistics functionality goes here
 
