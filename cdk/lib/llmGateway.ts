@@ -304,60 +304,57 @@ export class LlmGatewayStack extends cdk.Stack {
       type: apigw.AuthorizationType.COGNITO,
     });
 
-    for (const modelKey of Object.keys(bedrockModels)) {
-      // It's more secure for each lambda to have its own role, despite the clutter.
-      const lambdaRole = this.createLlmGatewayLambdaRole(
-        "RestLambda" + modelKey,
-        api.restApiId,
-        chatHistoryTable
-      );
+    // It's more secure for each lambda to have its own role, despite the clutter.
+    const lambdaRole = this.createLlmGatewayLambdaRole(
+      "RestLambdaRole",
+      api.restApiId,
+      chatHistoryTable
+    );
 
-      // Create Lambda function from the ECR image.
-      const vpcParams = this.configureVpcParams();
-      const fn = new lambda.DockerImageFunction(this, modelKey, {
-        code: lambda.DockerImageCode.fromEcr(bedrockEcr, { tag: "latest" }),
-        role: lambdaRole,
-        environment: {
-          CHAT_HISTORY_TABLE_NAME: this.chatHistoryTableName,
-          DEFAULT_TEMP: this.defaultTemp,
-          DEFAULT_MAX_TOKENS: this.defaultMaxTokens,
-          REGION: this.regionValue,
-          MODEL: modelKey,
-          EMBEDDINGS_MODEL: this.embeddingsModel,
-          OPENSEARCH_DOMAIN_ENDPOINT: this.opensearchDomainEndpoint,
-          OPENSEARCH_INDEX: "llm-rag-hackathon",
-        },
-        timeout: cdk.Duration.minutes(15),
-        memorySize: 512,
-        ...vpcParams,
-      });
+    // Create Lambda function from the ECR image.
+    const vpcParams = this.configureVpcParams();
+    const fn = new lambda.DockerImageFunction(this, "RestLambda", {
+      code: lambda.DockerImageCode.fromEcr(bedrockEcr, { tag: "latest" }),
+      role: lambdaRole,
+      environment: {
+        CHAT_HISTORY_TABLE_NAME: this.chatHistoryTableName,
+        DEFAULT_TEMP: this.defaultTemp,
+        DEFAULT_MAX_TOKENS: this.defaultMaxTokens,
+        REGION: this.regionValue,
+        EMBEDDINGS_MODEL: this.embeddingsModel,
+        OPENSEARCH_DOMAIN_ENDPOINT: this.opensearchDomainEndpoint,
+        OPENSEARCH_INDEX: "llm-rag-hackathon",
+      },
+      timeout: cdk.Duration.minutes(15),
+      memorySize: 512,
+      ...vpcParams,
+    });
 
-      // Define the integration between API Gateway and Lambda
-      const integration = new apigw.LambdaIntegration(fn, {
-        proxy: true,
-      });
+    // Define the integration between API Gateway and Lambda
+    const integration = new apigw.LambdaIntegration(fn, {
+      proxy: true,
+    });
 
-      // Create a resource and associate the Lambda integration
-      const resource = api.root.addResource(modelKey);
-      const authTypes = apigw.AuthorizationType;
-      const authType = this.hasIamAuth ? authTypes.IAM : authTypes.NONE;
-      resource.addMethod("POST", integration, {
-        authorizationType: authType,
-        apiKeyRequired: false,
-        requestValidator: new apigw.RequestValidator(
-          this,
-          modelKey + "BodyValidator",
-          {
-            restApi: api,
-            requestValidatorName: modelKey + "BodyValidator",
-            validateRequestBody: true,
-          }
-        ),
-        requestModels: {
-          "application/json": greetModel,
-        },
-      });
-    }
+    // Create a resource and associate the Lambda integration
+    const resource = api.root.addResource("RestLambda");
+    const authTypes = apigw.AuthorizationType;
+    const authType = this.hasIamAuth ? authTypes.IAM : authTypes.NONE;
+    resource.addMethod("POST", integration, {
+      authorizationType: authType,
+      apiKeyRequired: false,
+      requestValidator: new apigw.RequestValidator(
+        this,
+        "RestLambdaBodyValidator",
+        {
+          restApi: api,
+          requestValidatorName: "RestLambdaBodyValidator",
+          validateRequestBody: true,
+        }
+      ),
+      requestModels: {
+        "application/json": greetModel,
+      },
+    });
   }
 
   createWebsocketApi(

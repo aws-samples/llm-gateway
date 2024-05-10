@@ -10,10 +10,8 @@ import uuid
 
 DEFAULT_DATASET = str(os.environ.get("DEFAULT_DATASET", "B2B"))
 DEFAULT_MAX_TOKENS = int(os.environ.get("DEFAULT_MAX_TOKENS", 4096))
-DEFAULT_STOP_SEQUENCES = ["Human", "Question", "Customer", "Guru"]
 DEFAULT_TEMP = float(os.environ.get("DEFAULT_TEMP", 0.2))
 DEFAULT_LANGCHAIN_USE = bool(os.environ.get("DEFAULT_LANGCHAIN_USE", False))
-MODEL = os.environ.get("MODEL", "anthropic.claude-v2")  # amazon.titan-tg1-large
 REGION = os.environ.get("REGION", "us-west-2")
 COUNT_TOKENS_LAMBDA = os.environ.get("COUNT_TOKENS_LAMBDA")
 
@@ -24,19 +22,20 @@ client = session.client("bedrock-runtime", REGION)
 print("Initialized Bedrock client.")
 
 
-def format_bedrock_request(prompt, temperature, max_tokens_to_sample, stop_sequences):
+def format_bedrock_request(prompt, temperature, max_tokens_to_sample,
+                           stop_sequences, model):
     bedrock_request = {
         "prompt": prompt,
         "temperature": temperature,
     }
-    if "anthropic" in MODEL:
+    if "anthropic" in model:
         bedrock_request["max_tokens_to_sample"] = max_tokens_to_sample
         bedrock_request["stop_sequences"] = stop_sequences
-    elif "cohere" in MODEL:
+    elif "cohere" in model:
         bedrock_request["stop_sequences"] = stop_sequences
-    elif "ai21" in MODEL:
+    elif "ai21" in model:
         print(1 + 1)
-    elif "amazon" in MODEL:
+    elif "amazon" in model:
         bedrock_request = {"inputText": prompt}
     return bedrock_request
 
@@ -54,10 +53,11 @@ def lambda_handler(event, context):
     # Get config from the request body.
     body = json.loads(event["body"])
     prompt = body["prompt"]
+    model = body["model"]
     # Set config values from the kwargs found inside the request body.
     model_kwargs = body["parameters"]
     temperature = model_kwargs.get("temperature", DEFAULT_TEMP)
-    stop_sequences = model_kwargs.get("stop_sequences", DEFAULT_STOP_SEQUENCES)
+    stop_sequences = model_kwargs.get("stop_sequences", [])
     max_tokens_to_sample = model_kwargs.get("max_tokens_to_sample", DEFAULT_MAX_TOKENS)
 
     full_chat = f"""\n\nHuman: {prompt} \n\nAssistant:"""
@@ -72,7 +72,7 @@ def lambda_handler(event, context):
     print(bedrock_request)
     payload = json.dumps(bedrock_request)
     response = client.invoke_model(
-        modelId=MODEL,
+        modelId=model,
         contentType="application/json",
         accept="application/json",
         body=payload,
