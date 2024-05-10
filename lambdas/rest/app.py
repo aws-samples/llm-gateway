@@ -1,9 +1,6 @@
-from langchain.agents.initialize import initialize_agent
 import boto3
 import json
-import langchain
 import os
-import uuid
 
 # Local imports
 # import files
@@ -17,13 +14,13 @@ COUNT_TOKENS_LAMBDA = os.environ.get("COUNT_TOKENS_LAMBDA")
 
 # Specify the local Bedrock installation location
 session = boto3.Session()
-session._loader.search_paths.extend(["/root/.aws/models"])
 client = session.client("bedrock-runtime", REGION)
 print("Initialized Bedrock client.")
 
 
-def format_bedrock_request(prompt, temperature, max_tokens_to_sample,
-                           stop_sequences, model):
+def format_bedrock_request(
+    prompt, temperature, max_tokens_to_sample, stop_sequences, model
+):
     bedrock_request = {
         "prompt": prompt,
         "temperature": temperature,
