@@ -3,16 +3,11 @@ from langchain_community.chat_models import BedrockChat
 from langchain_openai import ChatOpenAI
 from langchain_community.embeddings import BedrockEmbeddings
 from langchain_community.llms import Bedrock
-from langchain_community.vectorstores import OpenSearchVectorSearch
-from multiprocessing import Process, Pipe
-from opensearchpy import RequestsHttpConnection, AWSV4SignerAuth
-from sqlalchemy import create_engine
 import boto3
 import datetime
 import json
 import logging
 import os
-import pandas as pd
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -27,7 +22,6 @@ DEFAULT_STOP_SEQUENCES = ["Human", "Question", "Customer", "Guru"]
 DEFAULT_TEMP = float(os.environ.get("DEFAULT_TEMP", 0.0))
 # Model selection.
 EMBEDDINGS_MODEL = os.environ.get("EMBEDDINGS_MODEL")
-MODEL = os.environ.get("MODEL", "anthropic.claude-v2")
 API_KEY = os.environ.get("API_KEY", "")
 ## END ENVIORNMENT VARIABLES ###################################################
 ## BEGIN NETWORK ANALYSIS ######################################################
@@ -136,10 +130,11 @@ def post_to_cache(dynamodb_client, node_id, prompt, responses):
         print("Error saving message to cache:", str(e))
 
 
-def append_prompt_to_history(prompt, previous_requests, previous_responses):
+def append_prompt_to_history(prompt, previous_requests, previous_responses,
+                             model,):
     chat = ""
     # Reconstruct the previous conversation, unless this is an embeddings model.
-    if "gpt" in MODEL:
+    if "gpt" in model:
         messages = []
         for i in range(len(previous_requests)):
             request = previous_requests[i]
@@ -150,7 +145,7 @@ def append_prompt_to_history(prompt, previous_requests, previous_responses):
         messages.append(("human", prompt))
         return messages
     else:
-        if "embed" not in MODEL:
+        if "embed" not in modeL:
             for i in range(len(previous_requests)):
                 request = previous_requests[i]
                 response = ""
@@ -171,6 +166,7 @@ class Settings:
         # Get config from the request body.
         body = json.loads(event["body"])
         self.prompt = body["prompt"]
+        self.model = body["model"]
         model_kwargs = body.get("parameters", {})
 
         self.node_id = model_kwargs.get("node_id", None)
@@ -232,7 +228,7 @@ def post_to_ws(string, table, connection_id, other_conn_id, apigw_management_cli
             print("Couldn't remove connection", other_conn_id)
 
 
-def handle_message(event, table, connection_id, event_body, apigw_management_client):
+def handle_message(event, table, connection_id, apigw_management_client):
     """
     Handles messages sent by a participant in the chat. Looks up all connections
     currently tracked in the DynamoDB table, and uses the API Gateway Management API
@@ -244,8 +240,6 @@ def handle_message(event, table, connection_id, event_body, apigw_management_cli
 
     :param table: The DynamoDB connection table.
     :param connection_id: The ID of the connection that sent the message.
-    :param event_body: The body of the message sent from API Gateway. This is a
-                       dict with a `msg` field that contains the message to send.
     :param apigw_management_client: A Boto3 API Gateway Management API client.
     :return: An HTTP status code that indicates the result of posting the message
              to all active connections.
@@ -259,16 +253,16 @@ def handle_message(event, table, connection_id, event_body, apigw_management_cli
 
     settings = Settings(event, session)
 
-    if MODEL.startswith("gpt"):
+    if settings.model.startswith("gpt"):
         llm_chat = ChatOpenAI(
-            model=MODEL,
+            model=settings.model,
             api_key=API_KEY,
             temperature=0
         )
     else:
         # Create a LangChain BedrockChat to stream the results.
         llm_chat = BedrockChat(
-            model_id=MODEL,
+            model_id=settings.model,
             client=settings.bedrock_runtime,
             model_kwargs={
                 "max_tokens_to_sample": 4096,
@@ -327,7 +321,7 @@ def handle_message(event, table, connection_id, event_body, apigw_management_cli
             )
     else:
         full_chat = append_prompt_to_history(
-            settings.prompt, previous_requests, previous_responses
+            settings.prompt, previous_requests, previous_responses, settings.model,
         )
 
         full_completion = ""
@@ -388,7 +382,7 @@ def handle_message(event, table, connection_id, event_body, apigw_management_cli
     post_to_history(
         settings.dynamodb_client,
         settings.chat_id,
-        MODEL,
+        settings.model,
         requests=[settings.prompt],
         responses=[full_response_json],
     )
@@ -484,8 +478,6 @@ def lambda_handler(event, context):
         response["statusCode"] = handle_disconnect(table, connection_id)
     elif route_key == "sendmessage" or DEBUG:
         print("Handling message.")
-        body = event.get("body")
-        body = json.loads(body if body is not None else '{"prompt": ""}')
         domain = event.get("requestContext", {}).get("domainName")
         stage = event.get("requestContext", {}).get("stage")
         if (domain is None or stage is None) and not DEBUG:
@@ -501,7 +493,7 @@ def lambda_handler(event, context):
                 "apigatewaymanagementapi", endpoint_url=f"https://{domain}/{stage}"
             )
             response["statusCode"] = handle_message(
-                event, table, connection_id, body, apigw_management_client
+                event, table, connection_id, apigw_management_client,
             )
     else:
         response["statusCode"] = 404
