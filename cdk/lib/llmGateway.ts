@@ -15,26 +15,15 @@ import { Construct } from "constructs";
 import { HttpMethod } from "aws-cdk-lib/aws-events";
 import { WebSocketLambdaIntegration } from "@aws-cdk/aws-apigatewayv2-integrations-alpha";
 
-/* At present, Amazon Bedrock streaming is supported by:
- * - Anthropic Claude 2
- * - AI21 Labs Jurassic-2
- * - Cohere Command
- * - Stability.ai Diffusion
+/* At present, this repository supports:
+ *  "ai21.j2-mid-v1": {},
+ *  "ai21.j2-ultra-v1": {},
+ *  "amazon.titan-embed-text-v1": {},
+ *  "anthropic.claude-v2": {},
+ *  "anthropic.claude-v1": {},
+ *  "anthropic.claude-instant-v1": {},
+ *  "cohere.command-text-v14": {},
  */
-const bedrockModels = {
-  // AI21
-  "ai21.j2-mid-v1": {},
-  "ai21.j2-ultra-v1": {},
-  // Amazon
-  "amazon.titan-embed-text-v1": {},
-  // "amazon.titan-text-express-v1": "",  // Not yet available.
-  // Anthropic
-  "anthropic.claude-v2": {},
-  "anthropic.claude-v1": {},
-  "anthropic.claude-instant-v1": {},
-  // Cohere
-  "cohere.command-text-v14": {},
-};
 
 export class LlmGatewayStack extends cdk.Stack {
   stackPrefix = "LlmGateway";
@@ -47,8 +36,6 @@ export class LlmGatewayStack extends cdk.Stack {
   hasIamAuth =
     String(process.env.API_GATEWAY_USE_IAM_AUTH).toLowerCase() == "true";
   regionValue = String(process.env.REGION_ID || "us-east-1");
-  restEcrRepoName = process.env.ECR_REST_REPOSITORY;
-  modelId = String(process.env.MODEL_ID);
   apiKey = String(process.env.API_KEY);
   useApiKey =
     String(process.env.API_GATEWAY_USE_API_KEY).toLowerCase() == "true";
@@ -213,7 +200,6 @@ export class LlmGatewayStack extends cdk.Stack {
   }
 
   createRestApi(
-    bedrockEcr: ecr.IRepository,
     chatHistoryTable: dynamodb.Table,
     costLambda: lambda.Function
   ) {
@@ -313,9 +299,13 @@ export class LlmGatewayStack extends cdk.Stack {
 
     // Create Lambda function from the ECR image.
     const vpcParams = this.configureVpcParams();
-    const fn = new lambda.DockerImageFunction(this, "RestLambda", {
-      code: lambda.DockerImageCode.fromEcr(bedrockEcr, { tag: "latest" }),
+    const fn = new lambda.Function(this, "RestLambda", {
       role: lambdaRole,
+      runtime: lambda.Runtime.PYTHON_3_12,
+      handler: "app.lambda_handler",
+      code: lambda.Code.fromAsset(
+        path.join(__dirname, "../../lambdas/rest/")
+      ),
       environment: {
         CHAT_HISTORY_TABLE_NAME: this.chatHistoryTableName,
         DEFAULT_TEMP: this.defaultTemp,
@@ -414,7 +404,6 @@ export class LlmGatewayStack extends cdk.Stack {
           DEFAULT_TEMP: this.defaultTemp,
           DEFAULT_MAX_TOKENS: this.defaultMaxTokens,
           REGION: this.regionValue,
-          MODEL: this.modelId,
           API_KEY: this.apiKey,
           EMBEDDINGS_MODEL: this.embeddingsModel,
           OPENSEARCH_DOMAIN_ENDPOINT: this.opensearchDomainEndpoint,
@@ -481,12 +470,7 @@ export class LlmGatewayStack extends cdk.Stack {
 
     if (process.env.API_GATEWAY_TYPE == "rest") {
       // Assuming you have an existing ECR repository.
-      const ecrRepo = ecr.Repository.fromRepositoryName(
-        this,
-        this.restEcrRepoName!,
-        this.restEcrRepoName!
-      );
-      const api = this.createRestApi(ecrRepo, chatHistoryTable, costLambda);
+      const api = this.createRestApi(chatHistoryTable, costLambda);
     } else if (process.env.API_GATEWAY_TYPE == "websocket") {
       // Assuming you have an existing ECR repository.
       const ecrRepo = ecr.Repository.fromRepositoryName(
