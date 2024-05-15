@@ -64,6 +64,7 @@ def lambda_handler(event, context):
         temperature,
         max_tokens_to_sample,
         stop_sequences,
+        model,
     )
 
     print(bedrock_request)
