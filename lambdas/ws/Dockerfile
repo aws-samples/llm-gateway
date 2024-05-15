@@ -5,9 +5,7 @@ RUN pip install -r requirements.txt
 
 ENV HOME /tmp
 
-RUN chmod o+rx /root
-RUN mkdir -p /root/.aws/models/bedrock-runtime
-COPY bedrock-runtime /root/.aws/models/bedrock-runtime/
+RUN chmod o+rx /root  # TODO: Can we delete this?
 
 COPY app.py ${LAMBDA_TASK_ROOT}
 
