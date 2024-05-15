@@ -145,7 +145,7 @@ def append_prompt_to_history(prompt, previous_requests, previous_responses,
         messages.append(("human", prompt))
         return messages
     else:
-        if "embed" not in modeL:
+        if "embed" not in model:
             for i in range(len(previous_requests)):
                 request = previous_requests[i]
                 response = ""
@@ -167,6 +167,7 @@ class Settings:
         body = json.loads(event["body"])
         self.prompt = body["prompt"]
         self.model = body["model"]
+        print("Using model:", self.model)
         model_kwargs = body.get("parameters", {})
 
         self.node_id = model_kwargs.get("node_id", None)
@@ -184,12 +185,14 @@ class Settings:
 
 def get_ws_user_name(table, connection_id):
     user_name = "guest"
+    return user_name
     try:
         item_response = table.get_item(Key={"connection_id": connection_id})
         print(f'item_response: {item_response}')
-        user_name = item_response["Item"]["user_name"]
-        print("Got user name", user_name)
-    except ClientError:
+        if item_response.get("Item"):
+            user_name = str(item_response["Item"].get("user_name"))
+            print("Got user name", user_name)
+    except (ClientError,KeyError):
         print("Couldn't find user name. Using", user_name)
     return user_name
 
@@ -265,7 +268,7 @@ def handle_message(event, table, connection_id, apigw_management_client):
             model_id=settings.model,
             client=settings.bedrock_runtime,
             model_kwargs={
-                "max_tokens_to_sample": 4096,
+                # "max_tokens_to_sample": 4096,
                 "temperature": 0.0,
             },
         )
@@ -472,6 +475,7 @@ def lambda_handler(event, context):
     response = {"statusCode": 200}
     if route_key == "$connect":
         user_name = event.get("queryStringParameters", {"name": "guest"}).get("name")
+        print(f'username: {user_name}')
         print(f'username: {user_name}')
         response["statusCode"] = handle_connect(user_name, table, connection_id)
     elif route_key == "$disconnect":
