@@ -20,15 +20,16 @@ The chatbot in this demo helps mobile network technicians summarize information 
 ## How to deploy the backend
 
 ### REST API
-1. Run the following commands:   ```
+1. Run the following commands:
+   ```
    > cd <project_root>/cdk/  # Go to the CDK directory.
    > cp template.env .env    # Create your own .env file with all necessary parameters.
    ```
-2. (Optional) If you want to use non-default settings for your project, edit the settings in your `.env` file. 
+3. (Optional) If you want to use non-default settings for your project, edit the settings in your `.env` file. 
    You will need to at least need to set `ECR_REST_REPOSITORY` to the name that you chose for your repository in step # 2.
-3. Run `export $(cat .env | xargs)` to export your `.env` file so that your settings can be read when you deploy your CDK stack.
-4. Deploy the `LlmGatewayStack` stack inside CDK (`cdk deploy`).
-5. If you need to make adjustments to your lambda code, re-run step (2) to
+4. Run `export $(cat .env | xargs)` to export your `.env` file so that your settings can be read when you deploy your CDK stack.
+5. Deploy the `LlmGatewayStack` stack inside CDK (`cdk deploy`).
+6. If you need to make adjustments to your lambda code, re-run step (2) to
    deploy your docker image, and then manually edit the lambda to point to your
    ECR repository's new `*:latest` tag.
 
