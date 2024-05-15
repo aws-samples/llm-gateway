@@ -1,6 +1,6 @@
 # AWS LLM Gateway
 
-Project ACTIVE as of Apr 25,  2024
+Project ACTIVE as of May 15, 2024
 
 ## Project Overview
 
@@ -91,7 +91,6 @@ API_GATEWAY_USE_API_KEY="true"   # "true" or "false"
 API_GATEWAY_USE_IAM_AUTH="true"  # "true" or "false"
 DEFAULT_MAX_TOKENS="4096"
 DEFAULT_TEMP="4096"
-ECR_REST_REPOSITORY="llm-gateway-rest"
 ECR_WEBSOCKET_REPOSITORY="llm-gateway-ws"
 REGION_ID="us-east-1"
 # OPENSEARCH_DOMAIN_ENDPOINT=""  # Optional
