@@ -1,5 +1,4 @@
 import * as apigw from "aws-cdk-lib/aws-apigateway";
-import * as apigwv2 from "@aws-cdk/aws-apigatewayv2-alpha";
 import * as cdk from "aws-cdk-lib";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
@@ -13,8 +12,10 @@ import * as path from "path";
 import * as wafv2 from "aws-cdk-lib/aws-wafv2";
 import { Construct } from "constructs";
 import { HttpMethod } from "aws-cdk-lib/aws-events";
-import { WebSocketLambdaIntegration } from "@aws-cdk/aws-apigatewayv2-integrations-alpha";
-
+import { WebSocketLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
+import * as apigwv2 from "aws-cdk-lib/aws-apigatewayv2";
+import * as apigatewayv2_auth from "aws-cdk-lib/aws-apigatewayv2-authorizers"
+import * as lambdaNode from "aws-cdk-lib/aws-lambda-nodejs"
 /* At present, this repository supports:
  *  "ai21.j2-mid-v1": {},
  *  "ai21.j2-ultra-v1": {},
@@ -431,10 +432,69 @@ export class LlmGatewayStack extends cdk.Stack {
     });
     fn.addToRolePolicy(WebsocketDynamoDBAccessPolicy);
 
+    const userPool = new cognito.UserPool(this, "userPool", {
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      passwordPolicy: {
+        minLength: 8,
+        requireDigits: true,
+        requireLowercase: false,
+        requireUppercase: true,
+        requireSymbols: true,
+      },
+      advancedSecurityMode:cognito.AdvancedSecurityMode.ENFORCED,
+    });
+
+    const userPoolClient = new cognito.UserPoolClient(this, "userPoolClient", {
+      userPool: userPool,
+      authFlows: { userPassword: true },
+    });
+
+
+    const authHandler = new lambdaNode.NodejsFunction(this, "AuthHandlerFunction", {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      entry: path.join(__dirname, "authorizers/websocket/index.ts"),
+      architecture: lambda.Architecture.ARM_64,
+      environment: {
+        USER_POOL_ID: userPool.userPoolId,
+        APP_CLIENT_ID: userPoolClient.userPoolClientId,
+      },
+      bundling: {
+        minify: false,
+      },
+      role: new iam.Role(this, "AuthHandlerRole", {
+        assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
+        roleName: "AuthHandlerRole",
+        inlinePolicies: {
+          LambdaPermissions: new iam.PolicyDocument({
+            statements: [
+              new iam.PolicyStatement({
+                sid: "WriteToCloudWatchLogs",
+                effect: iam.Effect.ALLOW,
+                actions: [
+                  "logs:CreateLogGroup",
+                  "logs:CreateLogStream",
+                  "logs:PutLogEvents",
+                ],
+                resources: ["*"],
+              }),
+            ],
+          }),
+        },
+      })
+    });
+
+    const authorizer = new apigatewayv2_auth.WebSocketLambdaAuthorizer(
+      "Authorizer",
+      authHandler,
+      {
+        identitySource: ["route.request.querystring.idToken"],
+      },
+    );
+
     // Create endpoints
     api.addRoute("$connect", {
       integration: new WebSocketLambdaIntegration("ConnectIntegration", fn),
-      // TODO: this function should have IAM authorization on it. This can be done in the console.
+      authorizer
     });
     api.addRoute("$disconnect", {
       integration: new WebSocketLambdaIntegration("DisconnectIntegration", fn),
