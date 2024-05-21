@@ -41,6 +41,7 @@ The chatbot in this demo helps mobile network technicians summarize information 
 4. If you want to use OpenAI LLMs, make sure to populate `API_KEY` with your OpenAI api key
 5. Run `./deploy.sh`
 6. If you need to make adjustments to your lambda code, simply re-run `./deploy.sh`
+7. To use Cognito Authentication against the API Gateway WebSocket, you'll need a Cognito user. Create one with your desired username and password with the `python3 create_cognito_user.py` script. Once you do that, Streamlit will automatically use the user you created to authenticate to the API Gateway WebSocket.
 
 ### Deployment settings
 
