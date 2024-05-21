@@ -35,33 +35,12 @@ The chatbot in this demo helps mobile network technicians summarize information 
 
 ### WebSocket API
 
-1. `cd` into `lambda/ws/`
-2. Deploy your image to Elastic Container Repository (ECR) by choosing a name for your ECR repository, and then following the
-   instructions provided in the ECR console. The commands you'll need to run
-   look something like this:
-   ```
-   > export AWS_REGION=<your_preferred_region>
-   > export AWS_ACCOUNT_ID=<your_account_id>
-   > export ECR_REPO_NAME=<your_perferred_name>
-   > source create_bedrock_runtime.sh
-   > aws ecr create-repository --repository-name ${ECR_REPO_NAME}
-   > docker build -t ${ECR_REPO_NAME} .
-   > docker tag ${ECR_REPO_NAME}:latest ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:latest
-   > aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
-   > docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO_NAME}:latest
-   ```
-3. Run the following commands:
-   ```
-   > cd <project_root>/cdk/  # Go to the CDK directory.
-   > cp template.env .env    # Create your own .env file with all necessary parameters.
-   ```
-4. (Optional) If you want to use non-default settings for your project, edit the settings in your `.env` file. 
-   You will need to at least need to set `ECR_WEBSOCKET_REPOSITORY` to the name that you chose for your repository in step # 2.
-5. Run `export $(cat .env | xargs)` to export your `.env` file so that your settings can be read when you deploy your CDK stack.
-6. Deploy the `LlmGatewayStack` stack inside CDK (`cdk deploy`).
-7. If you need to make adjustments to your lambda code, re-run step (2) to
-   deploy your docker image, and then manually edit the lambda to point to your
-   ECR repository's new `*:latest` tag.
+1. `cd` into `cdk`
+2. Run `cp template.env .env`
+3. In your new `.env` file, make sure `API_GATEWAY_TYPE` is set to `"websocket"`.
+4. If you want to use OpenAI LLMs, make sure to populate `API_KEY` with your OpenAI api key
+5. Run `./deploy.sh`
+6. If you need to make adjustments to your lambda code, simply re-run `./deploy.sh`
 
 ### Deployment settings
 
@@ -70,13 +49,13 @@ The following are settings which you can configure as needed for your project, a
 This information can also be found inside `<project_root>/cdk/template.env`.
 
 ```
-API_GATEWAY_TYPE="rest"          # "rest" or "websocket"
+API_GATEWAY_TYPE="websocket"          # "rest" or "websocket"
 API_GATEWAY_USE_API_KEY="true"   # "true" or "false"
 API_GATEWAY_USE_IAM_AUTH="true"  # "true" or "false"
 DEFAULT_MAX_TOKENS="4096"
-DEFAULT_TEMP="4096"
+DEFAULT_TEMP="0.0"
 ECR_WEBSOCKET_REPOSITORY="llm-gateway-ws"
-REGION_ID="us-east-1"
+API_KEY=""
 # OPENSEARCH_DOMAIN_ENDPOINT=""  # Optional
 ```
 

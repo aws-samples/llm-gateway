@@ -32,19 +32,19 @@ export class LlmGatewayStack extends cdk.Stack {
   chatHistoryTableName = "ChatHistory";
 
   // Environment variables
-  defaultMaxTokens = String(process.env.DEFAULT_MAX_TOKENS || 4096);
-  defaultTemp = String(process.env.DEFAULT_TEMP || 0.0);
-  hasIamAuth =
-    String(process.env.API_GATEWAY_USE_IAM_AUTH).toLowerCase() == "true";
-  regionValue = String(process.env.REGION_ID || "us-east-1");
-  apiKey = String(process.env.API_KEY);
-  useApiKey =
-    String(process.env.API_GATEWAY_USE_API_KEY).toLowerCase() == "true";
-  wsEcrRepoName = process.env.ECR_WEBSOCKET_REPOSITORY;
+  defaultMaxTokens = String(this.node.tryGetContext("maxTokens") || 4096);
+  defaultTemp = String(this.node.tryGetContext("defaultTemp") || 0.0);
+  hasIamAuth = String(this.node.tryGetContext("useIamAuth")).toLowerCase() == "true";
+  regionValue = this.region;
+  apiKey = String(this.node.tryGetContext("apiKey"));
+  useApiKey = String(this.node.tryGetContext("useApiKey")).toLowerCase() == "true";
+  wsEcrRepoName = String(this.node.tryGetContext("ecrWebsocketRepository"));
   opensearchDomainEndpoint = process.env.OPENSEARCH_DOMAIN_ENDPOINT || "";
   vpc = process.env.VPC || null;
   vpcSubnets = process.env.VPC_SUBNETS || null;
   vpcSecurityGroup = process.env.VPC_SECURITY_GROUP || null;
+  architecture = this.node.tryGetContext('architecture');
+  apiGatewayType = this.node.tryGetContext("apiGatewayType");
 
   tryGetParameter(parameterName: string, defaultValue: any = null) {
     const parameter = this.node.tryFindChild(parameterName) as cdk.CfnParameter;
@@ -98,6 +98,7 @@ export class LlmGatewayStack extends cdk.Stack {
     return new lambda.Function(this, "LlmGatewayTokenCounter", {
       role: role,
       runtime: lambda.Runtime.PYTHON_3_12,
+      architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
       handler: "app.lambda_handler",
       code: lambda.Code.fromAsset(
         path.join(__dirname, "../../lambdas/count_tokens/")
@@ -303,6 +304,7 @@ export class LlmGatewayStack extends cdk.Stack {
     const fn = new lambda.Function(this, "RestLambda", {
       role: lambdaRole,
       runtime: lambda.Runtime.PYTHON_3_12,
+      architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
       handler: "app.lambda_handler",
       code: lambda.Code.fromAsset(
         path.join(__dirname, "../../lambdas/rest/")
@@ -399,6 +401,7 @@ export class LlmGatewayStack extends cdk.Stack {
       {
         code: lambda.DockerImageCode.fromEcr(bedrockEcr, { tag: "latest" }),
         role: lambdaRole,
+        architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
         environment: {
           CHAT_HISTORY_TABLE_NAME: chatHistoryTable.tableName,
           WEBSOCKET_CONNECTIONS_TABLE_NAME: websocketConnectionsTable.tableName,
@@ -456,7 +459,7 @@ export class LlmGatewayStack extends cdk.Stack {
     const authHandler = new lambdaNode.NodejsFunction(this, "AuthHandlerFunction", {
       runtime: lambda.Runtime.NODEJS_20_X,
       entry: path.join(__dirname, "authorizers/websocket/index.ts"),
-      architecture: lambda.Architecture.ARM_64,
+      architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
       environment: {
         USER_POOL_ID: userPool.userPoolId,
         APP_CLIENT_ID: userPoolClient.userPoolClientId,
@@ -523,6 +526,11 @@ export class LlmGatewayStack extends cdk.Stack {
       description: 'WebSocket URL for the API Gateway',
     });
 
+    new cdk.CfnOutput(this, 'WebSocketLambdaFunctionName', {
+      value: fn.functionName,
+      description: 'Name of the websocket lambda function'
+    });
+
     return api;
   }
 
@@ -548,10 +556,10 @@ export class LlmGatewayStack extends cdk.Stack {
     const costTable = this.createSecureDdbTable("CostTable", "id");
     const costLambda = this.createTokenCountLambda("CostLambda", costTable);
 
-    if (process.env.API_GATEWAY_TYPE == "rest") {
+    if (this.apiGatewayType == "rest") {
       // Assuming you have an existing ECR repository.
       const api = this.createRestApi(chatHistoryTable, costLambda);
-    } else if (process.env.API_GATEWAY_TYPE == "websocket") {
+    } else if (this.apiGatewayType == "websocket") {
       // Assuming you have an existing ECR repository.
       const ecrRepo = ecr.Repository.fromRepositoryName(
         this,
@@ -565,7 +573,7 @@ export class LlmGatewayStack extends cdk.Stack {
       );
     } else {
       throw Error(
-        `Environment variable "API_GATEWAY_TYPE" must be set to either "rest" or "websocket"`
+        `apiGatewayType must be set to either "rest" or "websocket"`
       );
     }
   }
