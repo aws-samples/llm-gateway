@@ -29,6 +29,12 @@ ANY_NON_ASCII_CHAR = "(\\\\x[0-9a-fA-F]{2})"
 PATTERN = f"{ANY_WORD}|{UP_TO_3_DIGITS}|{ANY_NON_ASCII_CHAR}|{UP_TO_3_PUNCTUATION}"
 
 COST_DB = "../data/cost_db.csv"
+if 'model_id' not in st.session_state:
+    st.session_state['model_id'] = None
+
+def initialize_dependent_values():
+    # Initialize or reset values that are dependent on main_column
+    st.session_state['model_id'] = "anthropic.claude-3-sonnet-20240229-v1:0"  # Placeholder or default
 
 def get_estimated_tokens(s: str) -> int:
     """
@@ -142,6 +148,9 @@ def update_metrics(s, type_):
 main_column, right_column = st.columns([3, 1])
 
 with main_column:
+    if st.session_state.model_id == None:
+        initialize_dependent_values()
+
     # Title displayed on the streamlit web app
     st.title(f""":rainbow[LLM Gateway API Sample]""")
     # configuring values for session state
@@ -171,8 +180,9 @@ with main_column:
 
                 # Start the background thread
 
+                print(f'st.session_state.model_id: {st.session_state.model_id}')
                 thread = threading.Thread(
-                    target=bridge, args=(llm_answer_streaming(prompt), q)
+                    target=bridge, args=(llm_answer_streaming(prompt, st.session_state.model_id), q)
                 )
                 thread.start()
                 # making sure there are no messages present when generating the answer
@@ -204,6 +214,16 @@ with right_column:
     provider_options = ["Amazon Bedrock", "Azure & OpenAI"]
     provider = st.selectbox("Provider", provider_options)
 
+    model_map = {
+            "Claude 3 Sonnet": "anthropic.claude-3-sonnet-20240229-v1:0",
+            "Claude 3 Haiku": "anthropic.claude-3-haiku-20240307-v1:0",
+            "Llama 3": "meta.llama3-70b-instruct-v1:0",
+            "Amazon Titan G1 Express": "amazon.titan-text-express-v1",
+            "Mixtral 8x7B Instruct": "mistral.mixtral-8x7b-instruct-v0:1",
+            "OpenAI GPT 3.5": "gpt-3.5-turbo",
+            "OpenAI GPT 4": "gpt-4-turbo"
+        }
+
     if provider == "Amazon Bedrock":
         # Model dropdown
         model_options = [
@@ -213,11 +233,16 @@ with right_column:
             "Amazon Titan G1 Express",
             "Mixtral 8x7B Instruct",
         ]
-        selected_model = st.selectbox("Model", model_options)
     elif provider == "Azure & OpenAI":
         # Model dropdown
         model_options = ["OpenAI GPT 3.5", "OpenAI GPT 4"]
-        selected_model = st.selectbox("Model", model_options)
+
+    selected_model = st.session_state.model_selection = st.selectbox(
+            "Select Model",
+            options=model_options,
+        )
+
+    st.session_state.model_id = model_map[selected_model]
 
     # Quota limit
     if has_quota():
@@ -231,7 +256,8 @@ with right_column:
     else:
         estimated_usage_str = "0"
     st.write(f"""
-    - Model ID: {selected_model}
+    - Model Selected: {st.session_state.model_selection}
+    - Model Id: {st.session_state.model_id}
     - User: {selected_user}
     - Quota Plan: Daily
     - Estimated usage for this period: \$ {estimated_usage_str} / \$ {quota_limit}
