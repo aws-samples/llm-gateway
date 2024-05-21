@@ -20,6 +20,7 @@ bedrock = boto3.client('bedrock-runtime', region, endpoint_url=f'https://bedrock
                        config=config)
 
 resources_file_path = '../cdk/resources.txt'
+scripts_resources_file_path = '../scripts/resources.txt'
 # Initialize variables to hold the values
 UserPoolID = None
 UserPoolClientID = None
@@ -43,12 +44,25 @@ if os.path.exists(resources_file_path):
                     UserPoolClientID = value
                 elif key == 'WebSocketURL':
                     WebSocketURL = value
-                elif key == 'Username':
+else:
+    print(f"Error: The file {resources_file_path} does not exist")
+
+if os.path.exists(scripts_resources_file_path):
+    # Open the file and read the contents
+    with open(scripts_resources_file_path, 'r') as file:
+        # Iterate over each line in the file
+        for line in file:
+            stripped_line = line.strip()
+            if '=' in stripped_line:
+                # Split the line into key and value on the '=' character
+                key, value = line.strip().split('=')
+                # Assign the value to the appropriate variable based on the key
+                if key == 'Username':
                     Username = value
                 elif key == 'Password':
                     Password = value
 else:
-    print(f"Error: The file {resources_file_path} does not exist")
+    print(f"Error: The file {scripts_resources_file_path} does not exist")
 
 print(f'UserPoolID: {UserPoolID}')
 print(f'UserPoolClientID: {UserPoolClientID}')
@@ -100,8 +114,12 @@ async def llm_answer_streaming(question, model):
         print(f'did not find chat id in context')
     
     id_token = get_id_token(UserPoolClientID, UserPoolID, Username, Password)
+    headers = {
+        "Authorization": f"Bearer {id_token}"
+    }
+
     #print(f'id_token: {id_token}')
-    socket = await websockets.connect(f'{WebSocketURL}/prod?idToken={id_token}')
+    socket = await websockets.connect(f'{WebSocketURL}/prod', extra_headers=headers)
 
     print(f"message: {message}")
     await socket.send(json.dumps(message))
