@@ -2,6 +2,18 @@ import argparse
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
+def read_resources(file_path):
+    """ Read resources from the file and return UserPoolID and UserPoolClientID """
+    with open(file_path, 'r') as file:
+        content = file.read()
+    
+    resources = {}
+    for line in content.splitlines():
+        key, value = line.split('=')
+        resources[key.strip()] = value.strip()
+        
+    return resources['UserPoolID'], resources['UserPoolClientID']
+
 def authenticate_user(client, user_pool_id, client_id, username, password):
     try:
         # Authenticate the user and get the tokens or challenges
@@ -26,10 +38,10 @@ def authenticate_user(client, user_pool_id, client_id, username, password):
     except (ClientError, BotoCoreError) as error:
         return str(error)
 
-def respond_new_password_required(client, username, session, new_password):
+def respond_new_password_required(client, username, session, new_password, client_id):
     try:
         response = client.respond_to_auth_challenge(
-            ClientId='7gsbshgko4m5ud6omrprkjp4e4',
+            ClientId=client_id,
             ChallengeName='NEW_PASSWORD_REQUIRED',
             Session=session,
             ChallengeResponses={
@@ -44,8 +56,7 @@ def respond_new_password_required(client, username, session, new_password):
 
 def main(args):
     # AWS Cognito details
-    user_pool_id = 'us-east-1_61SqKxPA1'
-    client_id = '7gsbshgko4m5ud6omrprkjp4e4'
+    user_pool_id, client_id = read_resources("../cdk/resources.txt")
 
     # Initialize a Cognito Identity Provider client
     client = boto3.client('cognito-idp')
@@ -55,7 +66,7 @@ def main(args):
     if isinstance(result, dict) and 'ChallengeName' in result:
         # Handle NEW_PASSWORD_REQUIRED challenge
         access_token = respond_new_password_required(
-            client, args.username, result['Session'], args.new_password
+            client, args.username, result['Session'], args.new_password, client_id
         )
     elif isinstance(result, str) and result.startswith('ey'):
         access_token = result
