@@ -50,7 +50,7 @@ def main():
     result = create_cognito_user(user_pool_id, client_id, username, password)
     
     if result:
-        write_resources("../cdk/resources.txt", username, password)
+        write_resources("resources.txt", username, password)
         print("User created and updated in resources file successfully.")
     else:
         print("Failed to create user.")

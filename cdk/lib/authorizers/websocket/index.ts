@@ -12,7 +12,17 @@ export const handler: APIGatewayRequestAuthorizerHandler = async (event, context
       clientId: AppClientId,
     });
 
-    const encodedToken = event.queryStringParameters!.idToken!;
+    // Ensure headers exist and get the token from the Authorization header
+    const headers = event.headers;
+    if (!headers) throw new Error("Headers are missing");
+
+    const authorizationHeader = headers.Authorization || headers.authorization;
+    if (!authorizationHeader) throw new Error("Authorization header is missing");
+
+    const tokenParts = authorizationHeader.split(' ');
+    if (tokenParts[0] !== 'Bearer' || tokenParts.length !== 2) throw new Error("Invalid Authorization token format");
+    const encodedToken = tokenParts[1];
+
     const payload = await verifier.verify(encodedToken);
     console.log("Token is valid. Payload:", payload);
 

@@ -493,7 +493,7 @@ export class LlmGatewayStack extends cdk.Stack {
       "Authorizer",
       authHandler,
       {
-        identitySource: ["route.request.querystring.idToken"],
+        identitySource: ["route.request.header.Authorization"],
       },
     );
 

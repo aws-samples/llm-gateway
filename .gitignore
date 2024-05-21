@@ -11,3 +11,4 @@ cdk.context.json
 venv/
 cdk/outputs.json
 cdk/resources.txt
+scripts/resources.txt
