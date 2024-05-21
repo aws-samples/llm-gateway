@@ -446,7 +446,10 @@ export class LlmGatewayStack extends cdk.Stack {
 
     const userPoolClient = new cognito.UserPoolClient(this, "userPoolClient", {
       userPool: userPool,
-      authFlows: { userPassword: true },
+      authFlows: { 
+        userPassword: true,
+        adminUserPassword: true 
+      },
     });
 
 
@@ -501,6 +504,23 @@ export class LlmGatewayStack extends cdk.Stack {
     });
     api.addRoute("sendmessage", {
       integration: new WebSocketLambdaIntegration("SendMessageIntegration", fn),
+    });
+
+    // Output the User Pool ID
+    new cdk.CfnOutput(this, 'UserPoolId', {
+      value: userPool.userPoolId,
+      description: 'The ID of the User Pool',
+    });
+
+    // Output the User Pool Client ID
+    new cdk.CfnOutput(this, 'UserPoolClientId', {
+      value: userPoolClient.userPoolClientId,
+      description: 'The ID of the User Pool Client',
+    });
+
+    new cdk.CfnOutput(this, 'WebSocketUrl', {
+      value: api.apiEndpoint,
+      description: 'WebSocket URL for the API Gateway',
     });
 
     return api;

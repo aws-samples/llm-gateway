@@ -15,10 +15,46 @@ boto3.setup_default_session(profile_name=os.getenv('profile_name'))
 # increasing the timeout period when invoking bedrock
 config = botocore.config.Config(connect_timeout=120, read_timeout=120)
 # instantiating the bedrock client
-bedrock = boto3.client('bedrock-runtime', 'us-east-1', endpoint_url='https://bedrock-runtime.us-east-1.amazonaws.com',
+region = boto3.Session().region_name
+bedrock = boto3.client('bedrock-runtime', region, endpoint_url=f'https://bedrock-runtime.{region}.amazonaws.com',
                        config=config)
 
-uri = "wss://8b9ldf1092.execute-api.us-east-1.amazonaws.com/prod"
+resources_file_path = '../cdk/resources.txt'
+# Initialize variables to hold the values
+UserPoolID = None
+UserPoolClientID = None
+WebSocketURL = None
+Username = None
+Password = None
+
+if os.path.exists(resources_file_path):
+    # Open the file and read the contents
+    with open(resources_file_path, 'r') as file:
+        # Iterate over each line in the file
+        for line in file:
+            stripped_line = line.strip()
+            if '=' in stripped_line:
+                # Split the line into key and value on the '=' character
+                key, value = line.strip().split('=')
+                # Assign the value to the appropriate variable based on the key
+                if key == 'UserPoolID':
+                    UserPoolID = value
+                elif key == 'UserPoolClientID':
+                    UserPoolClientID = value
+                elif key == 'WebSocketURL':
+                    WebSocketURL = value
+                elif key == 'Username':
+                    Username = value
+                elif key == 'Password':
+                    Password = value
+else:
+    print(f"Error: The file {resources_file_path} does not exist")
+
+print(f'UserPoolID: {UserPoolID}')
+print(f'UserPoolClientID: {UserPoolClientID}')
+print(f'WebSocketURL: {WebSocketURL}')
+print(f'Username: {Username}')
+print(f'Password: {Password}')
 
 class ThreadSafeSessionState:
     def __init__(self):
@@ -36,7 +72,7 @@ class ThreadSafeSessionState:
 thread_safe_session_state = ThreadSafeSessionState()
 
 def authenticate_user(client_id, user_pool_id, username, password):
-    client = boto3.client('cognito-idp', region_name='us-east-1')
+    client = boto3.client('cognito-idp', region_name=region)
     
     response = client.initiate_auth(
         ClientId=client_id,
@@ -51,28 +87,21 @@ def authenticate_user(client_id, user_pool_id, username, password):
 # Use this function to get the ID token
 def get_id_token(client_id, user_pool_id, username, password):
     auth_response = authenticate_user(client_id, user_pool_id, username, password)
-    print("auth_response:", auth_response)
+    #print("auth_response:", auth_response)
     id_token = auth_response['AuthenticationResult']['IdToken']
     return id_token
 
-# Example usage
-client_id = '1dgcu4b1dfgqq6a5jjh4g4hgjh'
-user_pool_id = 'us-east-1_9MnACKCzk'
-username = 'mirodrr'
-password = 'Mysupersecretpassword!1'
-
-id_token = get_id_token(client_id, user_pool_id, username, password)
-print("ID Token:", id_token)
-
-
-async def llm_answer_streaming(question):
-    message = {"action": "sendmessage", "prompt": question}
+async def llm_answer_streaming(question, model):
+    message = {"action": "sendmessage", "prompt": question, "model": model}
     if thread_safe_session_state.get("chat_id"):
         print(f'found chat id in context')
         message["chat_id"] = thread_safe_session_state.get("chat_id")
     else:
         print(f'did not find chat id in context')
-    socket = await websockets.connect(f'{uri}?idToken={get_id_token(client_id, user_pool_id, username, password)}')
+    
+    id_token = get_id_token(UserPoolClientID, UserPoolID, Username, Password)
+    #print(f'id_token: {id_token}')
+    socket = await websockets.connect(f'{WebSocketURL}/prod?idToken={id_token}')
 
     print(f"message: {message}")
     await socket.send(json.dumps(message))

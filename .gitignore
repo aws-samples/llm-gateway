@@ -9,4 +9,6 @@ cdk.context.json
 .idea
 **/.env
 **/__pycache__/**
-client/path/to/venv/*
+venv/
+cdk/outputs.json
+cdk/resources.txt
