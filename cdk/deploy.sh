@@ -45,6 +45,9 @@ cdk deploy "$STACK_NAME" \
 --context maxTokens=$DEFAULT_MAX_TOKENS \
 --context defaultTemp=$DEFAULT_TEMP \
 --context ecrWebsocketRepository=$ECR_WEBSOCKET_REPOSITORY \
+--context metadataURLCopiedFromAzureAD=$METADATA_URL_COPIED_FROM_AZURE_AD \
+--context azureAdDomainPrefix=$AZURE_AD_DOMAIN_PREFIX \
+
 --outputs-file ./outputs.json
 
 # Check if the deployment was successful
@@ -56,12 +59,18 @@ if [ $? -eq 0 ]; then
     USER_POOL_CLIENT_ID=$(jq -r ".\"${STACK_NAME}\".UserPoolClientId" ./outputs.json)
     WEBSOCKET_URL=$(jq -r ".\"${STACK_NAME}\".WebSocketUrl" ./outputs.json)
     WEBSOCKET_LAMBDA_FUNCTION_NAME=$(jq -r ".\"${STACK_NAME}\".WebSocketLambdaFunctionName" ./outputs.json)
+    USER_POOL_DOMAIN=$(jq -r ".\"${STACK_NAME}\".UserPoolDomain" ./outputs.json)
+    ENTITY_ID=$(jq -r ".\"${STACK_NAME}\".EntityId" ./outputs.json)
+    REPLY_URL=$(jq -r ".\"${STACK_NAME}\".ReplyURL" ./outputs.json)
 
     # Write outputs to a file with modified keys and format
     echo "UserPoolID=$USER_POOL_ID" > resources.txt
     echo "UserPoolClientID=$USER_POOL_CLIENT_ID" >> resources.txt
     echo "WebSocketURL=$WEBSOCKET_URL" >> resources.txt
     echo "WebSocketLambdaFunctionName=$WEBSOCKET_LAMBDA_FUNCTION_NAME" >> resources.txt
+    echo "UserPoolDomain=$USER_POOL_DOMAIN" >> resources.txt
+    echo "EntityId=$ENTITY_ID" >> resources.txt
+    echo "ReplyURL=$REPLY_URL" >> resources.txt
 
     echo "Outputs have been written to resources.txt"
 

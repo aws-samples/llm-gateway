@@ -45,6 +45,8 @@ export class LlmGatewayStack extends cdk.Stack {
   vpcSecurityGroup = process.env.VPC_SECURITY_GROUP || null;
   architecture = this.node.tryGetContext('architecture');
   apiGatewayType = this.node.tryGetContext("apiGatewayType");
+  metadataURLCopiedFromAzureAD = this.node.tryGetContext("metadataURLCopiedFromAzureAD");
+  azureAdDomainPrefix = this.node.tryGetContext("azureAdDomainPrefix");
 
   tryGetParameter(parameterName: string, defaultValue: any = null) {
     const parameter = this.node.tryFindChild(parameterName) as cdk.CfnParameter;
@@ -435,6 +437,8 @@ export class LlmGatewayStack extends cdk.Stack {
     });
     fn.addToRolePolicy(WebsocketDynamoDBAccessPolicy);
 
+    const customAttributeName = "azureAdCustomAttribute"
+
     const userPool = new cognito.UserPool(this, "userPool", {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       passwordPolicy: {
@@ -445,7 +449,59 @@ export class LlmGatewayStack extends cdk.Stack {
         requireSymbols: true,
       },
       advancedSecurityMode:cognito.AdvancedSecurityMode.ENFORCED,
+      selfSignUpEnabled:false,
+      autoVerify: { email: true },
+      signInAliases: { email: true },
+      customAttributes: {
+        customAttributeName: new cognito.StringAttribute({ mutable: true })
+      },
     });
+
+    if(this.metadataURLCopiedFromAzureAD && this.azureAdDomainPrefix) {
+      // Add a domain to the user pool
+      const domain = userPool.addDomain('CognitoDomain', {
+        cognitoDomain: {
+          domainPrefix: this.azureAdDomainPrefix,
+        },
+      });
+
+      new cognito.UserPoolIdentityProviderSaml(this, 'MySamlProvider', {
+        userPool: userPool,
+        name: 'MyAzureAdProvider', // Replace with your provider name
+        metadata: cognito.UserPoolIdentityProviderSamlMetadata.url(this.metadataURLCopiedFromAzureAD), // Metadata document or URL
+        attributeMapping: {
+          // Map attributes from SAML token to Cognito user pool attributes
+          email: cognito.ProviderAttribute.other('http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'),
+          custom: {
+            customAttributeName: cognito.ProviderAttribute.other(customAttributeName)
+          }
+        }
+      });
+
+      new cognito.UserPoolClient(this, 'AzureAdUserPoolClient', {
+        userPool: userPool,
+        userPoolClientName: 'AzureAdUserPoolClient',
+        generateSecret: false, // Corresponds to --no-generate-secret
+        oAuth: {
+          callbackUrls: ['callbackURL'],
+          flows: {
+            authorizationCodeGrant: true, // Corresponds to --allowed-o-auth-flows code
+          },
+          scopes: [
+            cognito.OAuthScope.OPENID,
+            cognito.OAuthScope.EMAIL
+          ],
+        },
+        supportedIdentityProviders: [
+          cognito.UserPoolClientIdentityProvider.custom('IDProviderName')
+        ],
+        // Enabling the OAuth flows for the user pool client
+        enableTokenRevocation: true // Corresponds to --allowed-o-auth-flows-user-pool-client
+      });
+  
+    }
+
+    
 
     const userPoolClient = new cognito.UserPoolClient(this, "userPoolClient", {
       userPool: userPool,
@@ -519,6 +575,30 @@ export class LlmGatewayStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'UserPoolClientId', {
       value: userPoolClient.userPoolClientId,
       description: 'The ID of the User Pool Client',
+    });
+
+    // Output the domain URL
+    new cdk.CfnOutput(this, 'UserPoolDomain', {
+      value: `https://${domainPrefix}.auth.${this.regionValue}.amazoncognito.com`,
+    });
+
+    const entityId = `urn:amazon:cognito:sp:${userPool.userPoolId}`;
+
+    // Output the Identifier (Entity ID)
+    new cdk.CfnOutput(this, 'EntityId', {
+      value: entityId,
+    });
+
+    // Reply URL for the SAML provider
+    const replyUrl = `https://${domainPrefix}.auth.${this.regionValue}.amazoncognito.com/saml2/idpresponse`;
+
+    // Output the Reply URL
+    new cdk.CfnOutput(this, 'ReplyURL', {
+      value: replyUrl,
+    });
+
+    new cdk.CfnOutput(this, 'CustomAttributeName', {
+      value: customAttributeName,
     });
 
     new cdk.CfnOutput(this, 'WebSocketUrl', {
