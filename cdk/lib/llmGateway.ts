@@ -52,6 +52,7 @@ export class LlmGatewayStack extends cdk.Stack {
   streamlitEcrRepoName = String(this.node.tryGetContext("ecrStreamlitRepository"));
   uiCertArn = String(this.node.tryGetContext("uiCertArn"));
   uiDomainName = String(this.node.tryGetContext("uiDomainName"));
+  metadataURLCopiedFromAzureAD = this.node.tryGetContext("metadataURLCopiedFromAzureAD");
 
   tryGetParameter(parameterName: string, defaultValue: any = null) {
     const parameter = this.node.tryFindChild(parameterName) as cdk.CfnParameter;
@@ -442,6 +443,7 @@ export class LlmGatewayStack extends cdk.Stack {
     });
     fn.addToRolePolicy(WebsocketDynamoDBAccessPolicy);
 
+    let signInAliases = this.metadataURLCopiedFromAzureAD ? { email: true } : { username: true, email: true }
     const userPool = new cognito.UserPool(this, "userPool", {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       passwordPolicy: {
@@ -452,7 +454,30 @@ export class LlmGatewayStack extends cdk.Stack {
         requireSymbols: true,
       },
       advancedSecurityMode:cognito.AdvancedSecurityMode.ENFORCED,
+      selfSignUpEnabled: false,
+      autoVerify: { email: true},
+      signInAliases: signInAliases,
+      customAttributes: {
+        azureAdCustom: new cognito.StringAttribute({ mutable: true })
+      },
     });
+
+    let provider = cognito.UserPoolClientIdentityProvider.COGNITO;
+    if (this.metadataURLCopiedFromAzureAD) {
+      let azureAdProvider = new cognito.UserPoolIdentityProviderSaml(this, 'MySamlProvider', {
+        userPool: userPool,
+        name: "Azure-AD",
+        metadata: cognito.UserPoolIdentityProviderSamlMetadata.url(this.metadataURLCopiedFromAzureAD), // Metadata document or URL
+        attributeMapping: {
+          // Map attributes from SAML token to Cognito user pool attributes
+          email: cognito.ProviderAttribute.other('http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'),
+          custom: {
+            "custom:azureAdCustom": cognito.ProviderAttribute.other("http://schemas.microsoft.com/ws/2008/06/identity/claims/groups")
+          }
+        }
+      });
+      provider = cognito.UserPoolClientIdentityProvider.custom(azureAdProvider.providerName)
+    }
 
     const azureAdDomainPrefix = "llmgatewaymichaeltest123"
 
@@ -467,7 +492,7 @@ export class LlmGatewayStack extends cdk.Stack {
       userPool,
       generateSecret: true,
       oAuth: {
-        callbackUrls: [`https://${this.uiDomainName}/oauth2/idpresponse`, `https://${this.uiDomainName}/*`],
+        callbackUrls: [`https://${this.uiDomainName}/oauth2/idpresponse`, `https://${this.uiDomainName}/`],
         flows: {
           authorizationCodeGrant: true
         },
@@ -476,7 +501,10 @@ export class LlmGatewayStack extends cdk.Stack {
           cognito.OAuthScope.EMAIL
         ],
       },
-      supportedIdentityProviders: [cognito.UserPoolClientIdentityProvider.COGNITO],
+      supportedIdentityProviders: [
+        provider
+      ],
+      enableTokenRevocation: true,
     });
 
     const vpc = new ec2.Vpc(this, 'MyVPC', { });
@@ -694,6 +722,35 @@ export class LlmGatewayStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'StreamlitUiUrl', {
       value: "https://" + this.uiDomainName,
       description: 'The url of the streamlit UI'
+    });
+
+    // Output the domain URL
+    new cdk.CfnOutput(this, 'UserPoolDomain', {
+      value: `https://${azureAdDomainPrefix}.auth.${this.regionValue}.amazoncognito.com`,
+    });
+
+    const entityId = `urn:amazon:cognito:sp:${userPool.userPoolId}`;
+
+    // Output the Identifier (Entity ID)
+    new cdk.CfnOutput(this, 'EntityId', {
+      value: entityId,
+    });
+
+    // Reply URL for the SAML provider
+    const replyUrl = `https://${azureAdDomainPrefix}.auth.${this.regionValue}.amazoncognito.com/saml2/idpresponse`;
+
+    // Output the Reply URL
+    new cdk.CfnOutput(this, 'ReplyURL', {
+      value: replyUrl,
+    });
+
+    new cdk.CfnOutput(this, 'CustomAttributeName', {
+      value: "azureAdCustom",
+    });
+
+    new cdk.CfnOutput(this, 'provider', {
+      value: provider.name,
+      description: 'The chosen provider'
     });
 
     return api;
