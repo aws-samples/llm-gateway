@@ -4,6 +4,10 @@ import asyncio
 import threading
 import queue
 import websockets
+import base64
+import json
+import jwt
+from streamlit.web.server.websocket_headers import _get_websocket_headers
 
 st.set_page_config(layout="wide")
 
@@ -29,6 +33,27 @@ import csv
 # PATTERN = f"{ANY_WORD}|{UP_TO_3_DIGITS}|{ANY_NON_ASCII_CHAR}|{UP_TO_3_PUNCTUATION}"
 
 # COST_DB = "../data/cost_db.csv"
+
+def process_session_token():
+    '''
+    WARNING: We use unsupported features of Streamlit
+             However, this is quite fast and works well with
+             the latest version of Streamlit (1.27)
+             Also, this does not verify the session token's
+             authenticity. It only decodes the token.
+    '''
+    headers = _get_websocket_headers()
+    if not headers or "X-Amzn-Oidc-Data" not in headers:
+        return {}
+    return jwt.decode(
+        headers["X-Amzn-Oidc-Data"], algorithms=["ES256"], options={"verify_signature": False}
+    )
+
+session_token = process_session_token()
+#st.write(f'session_token: {session_token}')
+
+username = session_token["username"]
+
 if 'model_id' not in st.session_state:
     st.session_state['model_id'] = None
 
@@ -209,9 +234,6 @@ with right_column:
     st.header("Usage Statistics")
     # Your usage statistics functionality goes here
 
-    user_options = ["Oz's User", "Andrew's AWS App", "Michael's Azure App"]
-    selected_user = st.selectbox("User", user_options)
-
     provider_options = ["Amazon Bedrock", "Azure & OpenAI"]
     provider = st.selectbox("Provider", provider_options)
 
@@ -259,7 +281,7 @@ with right_column:
     st.write(f"""
     - Model Selected: {st.session_state.model_selection}
     - Model Id: {st.session_state.model_id}
-    - User: {selected_user}
+    - User: {username}
     - Quota Plan: Daily
     - Estimated usage for this period: \$ {estimated_usage_str} / \$ {quota_limit}
     """)
