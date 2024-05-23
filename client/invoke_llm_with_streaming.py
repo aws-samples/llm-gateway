@@ -87,7 +87,7 @@ thread_safe_session_state = ThreadSafeSessionState()
 
 def authenticate_user(client_id, user_pool_id, username, password):
     client = boto3.client('cognito-idp', region_name=region)
-    
+
     response = client.initiate_auth(
         ClientId=client_id,
         AuthFlow='USER_PASSWORD_AUTH',
@@ -112,7 +112,7 @@ async def llm_answer_streaming(question, model):
         message["chat_id"] = thread_safe_session_state.get("chat_id")
     else:
         print(f'did not find chat id in context')
-    
+
     id_token = get_id_token(UserPoolClientID, UserPoolID, Username, Password)
     headers = {
         "Authorization": f"Bearer {id_token}"
