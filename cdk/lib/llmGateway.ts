@@ -2,6 +2,7 @@ import * as apigw from "aws-cdk-lib/aws-apigateway";
 import * as cdk from "aws-cdk-lib";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
+import * as ecs from "aws-cdk-lib/aws-ecs";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as fs from "fs";
@@ -16,6 +17,9 @@ import { WebSocketLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integra
 import * as apigwv2 from "aws-cdk-lib/aws-apigatewayv2";
 import * as apigatewayv2_auth from "aws-cdk-lib/aws-apigatewayv2-authorizers"
 import * as lambdaNode from "aws-cdk-lib/aws-lambda-nodejs"
+import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2"
+import * as elbv2Actions from "aws-cdk-lib/aws-elasticloadbalancingv2-actions";
+import * as route53 from "aws-cdk-lib/aws-route53";
 /* At present, this repository supports:
  *  "ai21.j2-mid-v1": {},
  *  "ai21.j2-ultra-v1": {},
@@ -45,6 +49,9 @@ export class LlmGatewayStack extends cdk.Stack {
   vpcSecurityGroup = process.env.VPC_SECURITY_GROUP || null;
   architecture = this.node.tryGetContext('architecture');
   apiGatewayType = this.node.tryGetContext("apiGatewayType");
+  streamlitEcrRepoName = String(this.node.tryGetContext("ecrStreamlitRepository"));
+  uiCertArn = String(this.node.tryGetContext("uiCertArn"));
+  uiDomainName = String(this.node.tryGetContext("uiDomainName"));
 
   tryGetParameter(parameterName: string, defaultValue: any = null) {
     const parameter = this.node.tryFindChild(parameterName) as cdk.CfnParameter;
@@ -447,60 +454,213 @@ export class LlmGatewayStack extends cdk.Stack {
       advancedSecurityMode:cognito.AdvancedSecurityMode.ENFORCED,
     });
 
-    const userPoolClient = new cognito.UserPoolClient(this, "userPoolClient", {
-      userPool: userPool,
-      authFlows: { 
-        userPassword: true,
-        adminUserPassword: true 
+    const azureAdDomainPrefix = "llmgatewaymichaeltest123"
+
+    const cognitoDomain = userPool.addDomain('CognitoDomain', {
+      cognitoDomain: {
+        domainPrefix: azureAdDomainPrefix,
       },
     });
 
-
-    const authHandler = new lambdaNode.NodejsFunction(this, "AuthHandlerFunction", {
-      runtime: lambda.Runtime.NODEJS_20_X,
-      entry: path.join(__dirname, "authorizers/websocket/index.ts"),
-      architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
-      environment: {
-        USER_POOL_ID: userPool.userPoolId,
-        APP_CLIENT_ID: userPoolClient.userPoolClientId,
-      },
-      bundling: {
-        minify: false,
-      },
-      role: new iam.Role(this, "AuthHandlerRole", {
-        assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
-        roleName: "AuthHandlerRole",
-        inlinePolicies: {
-          LambdaPermissions: new iam.PolicyDocument({
-            statements: [
-              new iam.PolicyStatement({
-                sid: "WriteToCloudWatchLogs",
-                effect: iam.Effect.ALLOW,
-                actions: [
-                  "logs:CreateLogGroup",
-                  "logs:CreateLogStream",
-                  "logs:PutLogEvents",
-                ],
-                resources: ["*"],
-              }),
-            ],
-          }),
+    const applicationLoadBalanceruserPoolClient = new cognito.UserPoolClient(this, 'client', {
+      userPoolClientName: 'ApplicationLoadBalancerClient',
+      userPool,
+      generateSecret: true,
+      oAuth: {
+        callbackUrls: [`https://${this.uiDomainName}/oauth2/idpresponse`, `https://${this.uiDomainName}/*`],
+        flows: {
+          authorizationCodeGrant: true
         },
+        scopes: [
+          cognito.OAuthScope.OPENID,
+          cognito.OAuthScope.EMAIL
+        ],
+      },
+      supportedIdentityProviders: [cognito.UserPoolClientIdentityProvider.COGNITO],
+    });
+
+    const vpc = new ec2.Vpc(this, 'MyVPC', { });
+    const flowLog = new ec2.FlowLog(this, 'FlowLog', {
+      resourceType: ec2.FlowLogResourceType.fromVpc(vpc),
+      trafficType: ec2.FlowLogTrafficType.ALL,
+    });
+
+    // Create ECS Cluster
+    const cluster = new ecs.Cluster(this, 'AppCluster', {
+      vpc,
+      clusterName: 'LlmGatewayUI',
+      containerInsights:true,
+      
+    });
+
+    const logGroup = new logs.LogGroup(this, 'AppLogGroup', {
+      logGroupName: '/ecs/LlmGateway/StreamlitUI',
+      removalPolicy: cdk.RemovalPolicy.DESTROY
+    });
+
+    const ecsExecutionRole = new iam.Role(this, 'EcsExecutionRole', {
+      assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
+      roleName: 'LlmGatewayUIRole'
+    });
+
+    ecsExecutionRole.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonECSTaskExecutionRolePolicy'));
+
+    const stageName = 'prod'; 
+
+    const connectArn = `arn:aws:execute-api:${this.regionValue}:${this.account}:${api.apiId}/${stageName}/$connect`
+
+    const disconnectArn = `arn:aws:execute-api:${this.regionValue}:${this.account}:${api.apiId}/${stageName}/$disconnect`
+
+    const sendMessageArn = `arn:aws:execute-api:${this.regionValue}:${this.account}:${api.apiId}/${stageName}/sendmessage`
+
+    const policyStatement = new iam.PolicyStatement({
+      actions: ['execute-api:Invoke'],
+      resources: [connectArn, disconnectArn, sendMessageArn],
+      effect: iam.Effect.ALLOW
+    });
+
+    ecsExecutionRole.addToPolicy(policyStatement);
+
+    const taskDefinition = new ecs.FargateTaskDefinition(this, 'TaskDef', {
+      memoryLimitMiB: 512,
+      cpu: 256,
+      executionRole: ecsExecutionRole,
+      taskRole: ecsExecutionRole,
+      runtimePlatform: {
+        cpuArchitecture: this.architecture == "x86" ? ecs.CpuArchitecture.X86_64 : ecs.CpuArchitecture.ARM64,
+      }
+    });
+
+    const ecrRepoStreamlit = ecr.Repository.fromRepositoryName(
+      this,
+      this.streamlitEcrRepoName!,
+      this.streamlitEcrRepoName!
+    );
+
+    const container = taskDefinition.addContainer('streamlit', {
+      image: ecs.ContainerImage.fromEcrRepository(ecrRepoStreamlit, "latest"),
+      logging: ecs.LogDrivers.awsLogs({ logGroup, streamPrefix: 'streamlit' }),
+      environment: { 
+        WebSocketURL: api.apiEndpoint
+      },
+      healthCheck: {
+        command: ['CMD-SHELL', 'curl -f http://localhost:8501/healthz || exit 1'],
+        interval: cdk.Duration.seconds(30),
+        timeout: cdk.Duration.seconds(5),
+        retries: 3,
+        startPeriod: cdk.Duration.seconds(60)
+      }
+    });
+
+    container.addPortMappings({
+      containerPort: 8501,
+      hostPort: 8501
+    });
+
+    const albSecurityGroup = new ec2.SecurityGroup(this, 'ALBSecurityGroup', {
+      securityGroupName: 'LlmGatewayALB-sg',
+      vpc,
+      allowAllOutbound: true,
+    });
+
+    albSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80));
+    albSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443));
+
+    const appSecurityGroup = new ec2.SecurityGroup(this, 'AppSecurityGroup', {
+      securityGroupName: 'LlmGatewayUI-sg',
+      vpc,
+      allowAllOutbound: true,
+    });
+
+    appSecurityGroup.addIngressRule(albSecurityGroup, ec2.Port.tcp(8501));
+
+    const service = new ecs.FargateService(this, 'Service', {
+      serviceName: "LlmGatewayUI",
+      cluster,
+      taskDefinition,
+      desiredCount: 1,
+      securityGroups: [appSecurityGroup],
+      assignPublicIp: false,
+      circuitBreaker: {
+        enable:true,
+        rollback:true
+      }
+    });
+
+    const lb = new elbv2.ApplicationLoadBalancer(this, 'LB', {
+      vpc,
+      internetFacing: true,
+      securityGroup: albSecurityGroup,
+    });
+
+    const targetGroup = new elbv2.ApplicationTargetGroup(this, 'AppTG', {
+      vpc,
+      targetGroupName: 'LlmGatewayUI',
+      protocol: elbv2.ApplicationProtocol.HTTP,
+      targetType: elbv2.TargetType.IP,
+      port: 8501,
+      targets: [service]
+    });
+
+    const appListener = lb.addListener('appListener', {
+      port: 443,
+      protocol: elbv2.ApplicationProtocol.HTTPS,
+      certificates: [{ certificateArn: this.uiCertArn }],
+      defaultAction: elbv2.ListenerAction.fixedResponse(200, {
+        contentType: "text/plain",
+        messageBody: "This is the default action."
+      }),
+    });
+
+    const appListener80 = lb.addListener('appListener80', {
+      port: 80,
+      protocol: elbv2.ApplicationProtocol.HTTP,
+      defaultAction: elbv2.ListenerAction.redirect({
+        port:"443",
+        protocol: "HTTPS",
+        permanent: true
       })
     });
 
-    const authorizer = new apigatewayv2_auth.WebSocketLambdaAuthorizer(
-      "Authorizer",
-      authHandler,
-      {
-        identitySource: ["route.request.header.Authorization"],
-      },
-    );
+
+    appListener.addAction("authenticate-cognito", {
+      priority: 10,
+      conditions: [elbv2.ListenerCondition.pathPatterns(["/", "/*"])],
+      action: new elbv2Actions.AuthenticateCognitoAction({
+        userPool:userPool,
+        userPoolClient: applicationLoadBalanceruserPoolClient,
+        userPoolDomain: cognitoDomain,
+        next: elbv2.ListenerAction.forward([targetGroup])
+      })
+    });
+
+    const domainParts = this.uiDomainName.split(".");
+    const domainName = domainParts.slice(1).join(".");
+    const hostName = domainParts[0];
+
+    // Retrieve the existing Route 53 hosted zone
+    const hostedZone = route53.HostedZone.fromLookup(this, 'Zone', {
+      domainName: `${domainName}.`
+    });
+
+    // Create Route 53 A record pointing to the ALB
+    new route53.ARecord(this, 'AliasRecord', {
+      zone: hostedZone,
+      recordName: hostName,
+      target: route53.RecordTarget.fromAlias({
+        bind: () => ({
+          dnsName: lb.loadBalancerDnsName,
+          hostedZoneId: lb.loadBalancerCanonicalHostedZoneId,
+          evaluateTargetHealth: true,
+        })
+      })
+    });
+
 
     // Create endpoints
     api.addRoute("$connect", {
       integration: new WebSocketLambdaIntegration("ConnectIntegration", fn),
-      authorizer
+      authorizer: new apigatewayv2_auth.WebSocketIamAuthorizer
     });
     api.addRoute("$disconnect", {
       integration: new WebSocketLambdaIntegration("DisconnectIntegration", fn),
@@ -517,7 +677,7 @@ export class LlmGatewayStack extends cdk.Stack {
 
     // Output the User Pool Client ID
     new cdk.CfnOutput(this, 'UserPoolClientId', {
-      value: userPoolClient.userPoolClientId,
+      value: applicationLoadBalanceruserPoolClient.userPoolClientId,
       description: 'The ID of the User Pool Client',
     });
 
@@ -529,6 +689,11 @@ export class LlmGatewayStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'WebSocketLambdaFunctionName', {
       value: fn.functionName,
       description: 'Name of the websocket lambda function'
+    });
+
+    new cdk.CfnOutput(this, 'StreamlitUiUrl', {
+      value: "https://" + this.uiDomainName,
+      description: 'The url of the streamlit UI'
     });
 
     return api;
