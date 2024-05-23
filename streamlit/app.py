@@ -4,18 +4,25 @@ import asyncio
 import threading
 import queue
 import websockets
-import base64
-import json
-import jwt
+import warnings
+import boto3
+from streamlit_float import *
 from streamlit.web.server.websocket_headers import _get_websocket_headers
+import jwt
 
 st.set_page_config(layout="wide")
+float_init(theme=True, include_unstable_primary=False)
 
+# Initialize session state.
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "estimated_usage" not in st.session_state:
+    st.session_state.estimated_usage = 0
+# Inialize global variables.
 quota_limit = 0.0001
 
-# Initialize the variable
+quota_limit = 0.0001
 is_streaming = False
-
 
 ################################################################################
 # BEGIN - Lambda code - This needs to be migrated to the cloud
@@ -24,15 +31,17 @@ is_streaming = False
 import re
 import csv
 
-# ANY_WORD = "([a-zA-Z]+)"
-# UP_TO_3_DIGITS = "([\d]{1,3})"
-# PUNCTUATION = ".?!,\/\(\);:~=@%'\n"
-# UP_TO_3_PUNCTUATION = f"([{PUNCTUATION}]{1,3}+(?=(.?.?.?)*))"
-# ANY_NON_ASCII_CHAR = "(\\\\x[0-9a-fA-F]{2})"
+ANY_WORD = "([a-zA-Z]+)"
+UP_TO_3_DIGITS = "([\d]{1,3})"
+PUNCTUATION = ".?!,\/\(\);:~=@%'\n"
+UP_TO_3_PUNCTUATION = f"([{PUNCTUATION}]{1,3}+(?=(.?.?.?)*))"
+ANY_NON_ASCII_CHAR = "(\\\\x[0-9a-fA-F]{2})"
 
-# PATTERN = f"{ANY_WORD}|{UP_TO_3_DIGITS}|{ANY_NON_ASCII_CHAR}|{UP_TO_3_PUNCTUATION}"
+PATTERN = f"{ANY_WORD}|{UP_TO_3_DIGITS}|{ANY_NON_ASCII_CHAR}|{UP_TO_3_PUNCTUATION}"
 
-# COST_DB = "../data/cost_db.csv"
+COST_DB = "data/cost_db.csv"
+if 'model_id' not in st.session_state:
+    st.session_state['model_id'] = None
 
 def process_session_token():
     '''
@@ -52,78 +61,78 @@ def process_session_token():
 session_token = process_session_token()
 #st.write(f'session_token: {session_token}')
 
-username = session_token["username"]
+if "username" in session_token:
+    username = session_token["username"]
+else:
+    username = "Could not find username. Normal if you are running locally."
 
-if 'model_id' not in st.session_state:
-    st.session_state['model_id'] = None
 
 def initialize_dependent_values():
     # Initialize or reset values that are dependent on main_column
     st.session_state['model_id'] = "anthropic.claude-3-sonnet-20240229-v1:0"  # Placeholder or default
 
-# def get_estimated_tokens(s: str) -> int:
-#     """
-#     Counts the number of tokens in the given string `s`, according to the
-#     following method:
+def get_estimated_tokens(s: str) -> int:
+    """
+    Counts the number of tokens in the given string `s`, according to the
+    following method:
 
-#     - All words (characters in [a-zA-Z] separated by whitespace or _, count as 1 token.
-#     - Numbers and punctuation are put into groups of 1-3 digits. Each group counts as 1 token.
-#     - All non ascii characters count as 1 token per byte.
-#     """
+    - All words (characters in [a-zA-Z] separated by whitespace or _, count as 1 token.
+    - Numbers and punctuation are put into groups of 1-3 digits. Each group counts as 1 token.
+    - All non ascii characters count as 1 token per byte.
+    """
 
-#     s_encoded = s.encode("utf-8")
+    s_encoded = s.encode("utf-8")
 
-#     result = re.findall(PATTERN, str(s_encoded)[2:])
-#     return [item for tup in result for item in tup if item]
+    result = re.findall(PATTERN, str(s_encoded)[2:])
+    return [item for tup in result for item in tup if item]
 
 
 def has_quota():
-    return True
-    # return not (
-    #     st.session_state.estimated_usage and
-    #     st.session_state.estimated_usage > quota_limit
-    # )
+    return not (
+        st.session_state.estimated_usage and
+        st.session_state.estimated_usage > quota_limit
+    )
 
 
-# def estimate_cost(
-#     model: str,
-#     region: str,
-#     type_: str,
-#     string: str,
-#     use_cache:bool=False,
-# ) -> float:
-#     if type_ not in ["input", "output"]:
-#         raise Exception("`type_` must be one of [\"input\", \"output\"]")
+def estimate_cost(
+    model: str,
+    region: str,
+    type_: str,
+    string: str,
+    use_cache:bool=False,
+) -> float:
+    if type_ not in ["input", "output"]:
+        raise Exception("`type_` must be one of [\"input\", \"output\"]")
 
-#     key = ",".join([model, region, type_])
+    key = ",".join([model, region, type_])
 
-#     if use_cache:  # Skip the DDB step for better cost / time performance
-#         with open(COST_DB) as f:
-#             reader = csv.DictReader(f)
-#             costs_dict = {}
-#             for row in reader:
-#                 model_name = row["model_name"]
-#                 type_ = row["type"]
-#                 region = row["region"]
-#                 cost = float(row["cost_per_token"])
+    if use_cache:  # Skip the DDB step for better cost / time performance
+        with open(COST_DB) as f:
+            reader = csv.DictReader(f)
+            costs_dict = {}
+            for row in reader:
+                model_name = row["model_name"]
+                type_ = row["type"]
+                region = row["region"]
+                cost = float(row["cost_per_token"])
 
-#                 costs_dict[",".join([model_name,region,type_])] = cost
+                costs_dict[",".join([model_name,region,type_])] = cost
 
-#             cost_per_k_tokens = costs_dict.get(key)
+            cost_per_k_tokens = costs_dict.get(key)
 
-#             if not cost_per_k_tokens:
-#                 print(costs_dict)
-#                 raise Exception(
-#                     f"Could not find ({model}, {region}, {type_}) in cost DB."
-#                 )
+            if not cost_per_k_tokens:
+                print(costs_dict)
+                raise Exception(
+                    f"Could not find ({model}, {region}, {type_}) in cost DB."
+                )
 
-#             cost_per_token = cost_per_k_tokens / 1000
-#     else:  # Lookup in DDB
-#         raise NotImplemented()
+            cost_per_token = cost_per_k_tokens / 1000
+    else:  # Lookup in DDB
+        raise NotImplemented()
 
-#     n_tokens = len(get_estimated_tokens(string))
+    n_tokens = len(get_estimated_tokens(string))
 
-#     return cost_per_token * n_tokens
+    return cost_per_token * n_tokens
 
 ################################################################################
 # END - Lambda code
@@ -157,75 +166,97 @@ def sync_generator(sync_queue):
         yield item
 
 
-# def update_metrics(s, type_):
-#     print(metrics)
-#     metrics[f"n_{type_}_tokens"] = len(get_estimated_tokens(s))
-#     metrics[f"{type_}_cost"] = estimate_cost(
-#         "anthropic.claude-instant",
-#         "us-east-1",
-#         type_,
-#         s,
-#         use_cache=True
-#     )
-#     print(metrics)
+def update_metrics(s, type_):
+    print(metrics)
+    metrics[f"n_{type_}_tokens"] = len(get_estimated_tokens(s))
+    metrics[f"{type_}_cost"] = estimate_cost(
+        "anthropic.claude-instant",
+        "us-east-1",
+        type_,
+        s,
+        use_cache=True
+    )
+    print(metrics)
 
 
 # Create two columns
 main_column, right_column = st.columns([3, 1])
+if "is_responding" not in st.session_state:
+    st.session_state.is_responding = False
+
+
+def chat_content():
+    # append the prompt and the role (user) as a message to the session state
+    if "answer" in st.session_state:
+        st.session_state.messages.append({"role": "assistant", "content": st.session_state.answer or "Quota limit exceeded." })
+    if len(messages) == 0:
+        st.session_state.messages.append({"role": "user", "content": st.session_state.prompt})
+    st.session_state.is_responding = True
 
 with main_column:
+    st.title(f""":rainbow[LLM Gateway API Sample]""")
+
     if st.session_state.model_id == None:
         initialize_dependent_values()
 
-    # Title displayed on the streamlit web app
-    st.title(f""":rainbow[LLM Gateway API Sample]""")
-    # configuring values for session state
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-    if "estimated_usage" not in st.session_state:
-        st.session_state.estimated_usage = 0
-    # writing the message that is stored in session state
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+    if messages := st.session_state.messages:
+        if len(messages) > 1:
+            st.session_state.messages.append({"role": "user", "content": st.session_state.prompt})
 
-    # evaluating st.chat_input and determining if a prompt has been input
-    if prompt := st.chat_input("Ask me about anything..."):
-        # with the user icon, write the prompt to the front end
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        # append the prompt and the role (user) as a message to the session state
-        st.session_state.messages.append({"role": "user", "content": prompt})
+        if len(messages) > 1:
+            print(st.session_state.messages)
+            for message in st.session_state.messages[:-1]:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
+
+
+    if st.session_state.is_responding:
+        # writing the message that is stored in session state
+        if len(messages) > 0:
+            message = st.session_state.messages[-1]
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
         # respond as the assistant with the answer
         with st.chat_message("assistant"):
             q = queue.Queue()
 
             if has_quota():
                 # Update the input metrics.
-                #update_metrics(prompt, "input")
+                update_metrics(st.session_state.prompt, "input")
 
                 # Start the background thread
 
                 print(f'st.session_state.model_id: {st.session_state.model_id}')
                 thread = threading.Thread(
-                    target=bridge, args=(llm_answer_streaming(prompt, st.session_state.model_id), q)
+                    target=bridge,
+                    args=(
+                        llm_answer_streaming(
+                            st.session_state.prompt,
+                            st.session_state.model_id
+                        ),
+                        q,
+                    )
                 )
                 thread.start()
                 # making sure there are no messages present when generating the answer
                 message_placeholder = st.empty()
                 # calling the invoke_llm_with_streaming to generate the answer as a generator object, and using
                 # st.write stream to perform the actual streaming of the answer to the front end
-                answer = st.write_stream(sync_generator(q))
+                st.session_state.answer = st.write_stream(sync_generator(q))
             else:
-                answer = st.write("Quota limit exceeded.")
+                st.session_state.answer = st.write("Quota limit exceeded.")
+            is_responding = False
 
-        # appending the final answer to the session state
-        if has_quota():
-            #update_metrics(answer, "output")
-            print(st.session_state.estimated_usage)
-            st.session_state.estimated_usage += metrics["input_cost"]
-            st.session_state.estimated_usage += metrics["output_cost"]
-        st.session_state.messages.append({"role": "assistant", "content": answer})
+            # appending the final answer to the session state
+            if "answer" in st.session_state:
+                if has_quota():
+                    update_metrics(st.session_state.answer, "output")
+                    print(st.session_state.estimated_usage)
+                    st.session_state.estimated_usage += metrics["input_cost"]
+                    st.session_state.estimated_usage += metrics["output_cost"]
+
+    st.chat_input("Ask me about anything...", key='prompt', on_submit=chat_content)
+
 
 with right_column:
     # Control items
