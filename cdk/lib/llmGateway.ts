@@ -541,8 +541,6 @@ export class LlmGatewayStack extends cdk.Stack {
       image: ecs.ContainerImage.fromEcrRepository(ecrRepoStreamlit, "latest"),
       logging: ecs.LogDrivers.awsLogs({ logGroup, streamPrefix: 'streamlit' }),
       environment: { 
-        BASE_URL: 'https://api.example.com', // Should be dynamically set as per your requirements
-        API_KEY: 'your-api-key', // Should be securely managed
         WebSocketURL: api.apiEndpoint
       },
       healthCheck: {
