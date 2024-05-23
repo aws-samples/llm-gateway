@@ -35,13 +35,48 @@ The chatbot in this demo helps mobile network technicians summarize information 
 
 ### WebSocket API
 
+
+#### Creating your certificate
+
+##### Domain and Certifcate, AWS Internal
+
+1. Go to this page: https://supernova.amazon.dev/
+
+2. Complete the following steps to create a Route53 HostedZone and domain for this project:
+* Fill in the following:
+* Are you in AWS or CDO? , Select AWS
+* Select your organization, Select people
+* Owner Bindle ID, Input your Bindle id (find it here: Bindle UI)
+* Create a role using the instructions described here (https://w.amazon.com/bin/view/SuperNova/PreOnboardingSteps) and put that in the IAM Role ARN for SuperNova
+* Hosted Zone ID (Optional) , leave blank
+
+3. Verify that a HostedZone has been created in Route53 -> Hosted zones
+4. Complete the following steps to create an verify a certificate using the domain you just created
+* Go to Certificate Manager (ACM) -> Request a certificate
+* Select "Request a public certificate"
+* In Fully qualified domain name, put in your domain (should be something like username.people.aws.dev)
+* Click "Add another name to this Certficate", and add a sub domain (should be something like dashboard.username.people.aws.dev)
+* Click "Request"
+5. Go to your newly created certificate in AWS Certificate Manager -> Certificates, and click "Create records in Route 53"
+
+
+##### Domain and Certificate, AWS Customer
+
+1. Follow the instructions here to create a certificate with AWS Certificate Manager: https://docs.aws.amazon.com/acm/latest/userguide/gs-acm-request-public.html
+
+2. Follow the instructions here to validate your domain ownership for your certificate: https://docs.aws.amazon.com/acm/latest/userguide/domain-ownership-validation.html
+
+#### Deployment Steps
+
 1. `cd` into `cdk`
 2. Run `cp template.env .env`
 3. In your new `.env` file, make sure `API_GATEWAY_TYPE` is set to `"websocket"`.
-4. If you want to use OpenAI LLMs, make sure to populate `API_KEY` with your OpenAI api key
-5. Run `./deploy.sh`
-6. If you need to make adjustments to your lambda code, simply re-run `./deploy.sh`
-7. To use Cognito Authentication against the API Gateway WebSocket, you'll need a Cognito user. Create one with your desired username and password with the `python3 create_cognito_user.py` script. Once you do that, Streamlit will automatically use the user you created to authenticate to the API Gateway WebSocket.
+4. Set the `UI_CERT_ARN` to the ARN of the certificate you created in the `Creating your certificate` section.
+5. Set the `UI_DOMAIN_NAME` to the sub domain you created in the `Creating your certificate` section.
+6. If you want to use OpenAI LLMs, make sure to populate `API_KEY` with your OpenAI api key
+7. Run `./deploy.sh`
+8. If you need to make adjustments to your lambda code, simply re-run `./deploy.sh`
+9. To use Cognito Authentication against the API Gateway WebSocket, you'll need a Cognito user. Create one with your desired username and password with the `python3 create_cognito_user.py` script. Once you do that, Streamlit will automatically use the user you created to authenticate to the API Gateway WebSocket.
 
 ### Deployment settings
 
