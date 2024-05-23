@@ -66,6 +66,29 @@ The chatbot in this demo helps mobile network technicians summarize information 
 
 2. Follow the instructions here to validate your domain ownership for your certificate: https://docs.aws.amazon.com/acm/latest/userguide/domain-ownership-validation.html
 
+
+#### Azure Ad Authentication Steps
+1. Log in to the Azure Portal.
+2. In the **Azure Services** section, choose **Azure Active Directory**.
+3. In the left sidebar, choose **Enterprise applications**.
+4. Choose **New application**.
+5. On the **Browse Azure AD Gallery** page, choose **Create your own application**.
+6. Under **What’s the name of your app?**, enter a name for your application and select **Integrate any other application you don’t find in the gallery (Non-gallery)**, as shown in Figure 2 (https://d2908q01vomqb2.cloudfront.net/22d200f8670dbdb3e253a90eee5098477c95c23d/2021/11/09/Amazon-Cognito-federated-authentication-2.png). Choose **Create**.
+7. It will take few seconds for the application to be created in Azure AD, then you should be redirected to the **Overview** page for the newly added application.
+**Note:** Occasionally, this step can result in a **Not Found** error, even though Azure AD has successfully created a new application. If that happens, in Azure AD navigate back to **Enterprise applications** and search for your application by name.
+8. On the **Getting started** page, in the **Set up single sign on** tile, choose **Get started**, as shown in Figure 3 (https://d2908q01vomqb2.cloudfront.net/22d200f8670dbdb3e253a90eee5098477c95c23d/2021/11/10/Amazon-Cognito-federated-authentication-3r.png).
+9. On the next screen, select **SAML**.
+10. Scroll down to the SAML Signing Certificate section, and copy the App Federation Metadata Url by choosing the copy into clipboard icon (highlighted with red arrow in Figure 6 (https://d2908q01vomqb2.cloudfront.net/22d200f8670dbdb3e253a90eee5098477c95c23d/2021/11/09/Amazon-Cognito-federated-authentication-6.png)). In your `.env` file, use this value for the `METADATA_URL_COPIED_FROM_AZURE_AD` variable
+11. Complete the deployment steps in the `Deployment Steps` section
+12. In the output of the deployment stack, you will see `LlmGatewayStack.EntityId` and `LlmGatewayStack.ReplyURL`. Keep these in a text editor, as you'll need them in the next step.
+13. Make sure you're back in the **SAML** page you were on in steps 9 and 10
+14. In the middle pane under **Set up Single Sign-On with SAML**, in the **Basic SAML Configuration** section, choose the edit icon (https://d2908q01vomqb2.cloudfront.net/22d200f8670dbdb3e253a90eee5098477c95c23d/2021/11/09/pencil2.png).
+15. In the right pane under **Basic SAML Configuration**, replace the default **Identifier ID (Entity ID)** with the `LlmGatewayStack.EntityId` you copied previously. In the **Reply URL (Assertion Consumer Service URL)** field, enter the `LlmGatewayStack.ReplyURL` you copied previously, as shown in Figure 4 (https://d2908q01vomqb2.cloudfront.net/22d200f8670dbdb3e253a90eee5098477c95c23d/2021/11/09/Amazon-Cognito-federated-authentication-4.png). Choose **Save**.
+16. In the middle pane under **Set up Single Sign-On with SAML**, in the **User Attributes & Claims** section, choose **Edit**.
+17. Choose **Add a group claim**.
+18. On the **User Attributes & Claims** page, in the right pane under **Group Claims**, select **Groups assigned to the application**, leave **Source attribute** as **Group ID**, as shown in Figure 5 (https://d2908q01vomqb2.cloudfront.net/22d200f8670dbdb3e253a90eee5098477c95c23d/2021/11/09/Amazon-Cognito-federated-authentication-5.png). Choose **Save**.
+19. Go to the url in the `LlmGatewayStack.StreamlitUiUrl` stack output, and you should be prompted to log in using your AzureAd credentials. Make sure you have added the user you want to log-in with to the application you created in steps 4-6 (Within the application, go to **Users and groups** -> **Add user/group** and then add your desired users)
+
 #### Deployment Steps
 
 1. `cd` into `cdk`
@@ -74,9 +97,11 @@ The chatbot in this demo helps mobile network technicians summarize information 
 4. Set the `UI_CERT_ARN` to the ARN of the certificate you created in the `Creating your certificate` section.
 5. Set the `UI_DOMAIN_NAME` to the sub domain you created in the `Creating your certificate` section.
 6. If you want to use OpenAI LLMs, make sure to populate `API_KEY` with your OpenAI api key
-7. Run `./deploy.sh`
-8. If you need to make adjustments to your lambda code, simply re-run `./deploy.sh`
-9. To use Cognito Authentication against the API Gateway WebSocket, you'll need a Cognito user. Create one with your desired username and password with the `python3 create_cognito_user.py` script. Once you do that, Streamlit will automatically use the user you created to authenticate to the API Gateway WebSocket.
+7. If you want to use AzureAd for authentication, follow the steps in  `Azure Ad Authentication Steps` and make sure to populate the `METADATA_URL_COPIED_FROM_AZURE_AD` in your `.env` file
+8. Run `./deploy.sh`
+9. If you need to make adjustments to your lambda code, simply re-run `./deploy.sh`
+10. If you are using AzureAd for authentication, skip this step. To use Cognito Authentication against the API Gateway WebSocket, you'll need a Cognito user. Create one with your desired username and password with the `python3 create_cognito_user.py` script. Once you do that, Streamlit will automatically use the user you created to authenticate to the API Gateway WebSocket.
+11. Go to the url in the `LlmGatewayStack.StreamlitUiUrl` stack output
 
 ### Deployment settings
 
