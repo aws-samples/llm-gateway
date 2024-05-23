@@ -71,12 +71,14 @@ The chatbot in this demo helps mobile network technicians summarize information 
 1. `cd` into `cdk`
 2. Run `cp template.env .env`
 3. In your new `.env` file, make sure `API_GATEWAY_TYPE` is set to `"websocket"`.
-4. Set the `UI_CERT_ARN` to the ARN of the certificate you created in the `Creating your certificate` section.
-5. Set the `UI_DOMAIN_NAME` to the sub domain you created in the `Creating your certificate` section.
+4. Set the `UI_CERT_ARN` to the ARN of the certificate you created in the `Creating your certificate` section. If you don't have a certificate, leave this empty, and refer to step 11 after you deploy.
+5. Set the `UI_DOMAIN_NAME` to the sub domain you created in the `Creating your certificate` section. If you don't have a certificate, leave blank
 6. If you want to use OpenAI LLMs, make sure to populate `API_KEY` with your OpenAI api key
 7. Run `./deploy.sh`
 8. If you need to make adjustments to your lambda code, simply re-run `./deploy.sh`
 9. To use Cognito Authentication against the API Gateway WebSocket, you'll need a Cognito user. Create one with your desired username and password with the `python3 create_cognito_user.py` script. Once you do that, Streamlit will automatically use the user you created to authenticate to the API Gateway WebSocket.
+10. To access the UI, go to the url in the stack output `LlmGatewayStack.StreamlitUiUrl`
+11. If you did not provide a certificate, you will get a certificate warning. Click `Advanced` and then click `proceed to <LlmGatewayStack.StreamlitUiUrl> (unsafe)` (instructions are for Google Chrome) (obviously we do recommend you provide a certificate for any use-cases beyond testing).
 
 ### Deployment settings
 

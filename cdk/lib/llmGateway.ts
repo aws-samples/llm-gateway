@@ -461,6 +461,45 @@ export class LlmGatewayStack extends cdk.Stack {
         domainPrefix: azureAdDomainPrefix,
       },
     });
+    const vpc = new ec2.Vpc(this, 'MyVPC', { });
+
+    const albSecurityGroup = new ec2.SecurityGroup(this, 'ALBSecurityGroup', {
+      securityGroupName: 'LlmGatewayALB-sg',
+      vpc,
+      allowAllOutbound: true,
+    });
+
+    const lb = new elbv2.ApplicationLoadBalancer(this, 'LB', {
+      vpc,
+      internetFacing: true,
+      securityGroup: albSecurityGroup,
+    });
+
+    if (!this.uiDomainName) {
+      this.uiDomainName = lb.loadBalancerDnsName
+    } else {
+      const domainParts = this.uiDomainName.split(".");
+      const domainName = domainParts.slice(1).join(".");
+      const hostName = domainParts[0];
+
+      // Retrieve the existing Route 53 hosted zone
+      const hostedZone = route53.HostedZone.fromLookup(this, 'Zone', {
+        domainName: `${domainName}.`
+      });
+
+      // Create Route 53 A record pointing to the ALB
+      new route53.ARecord(this, 'AliasRecord', {
+        zone: hostedZone,
+        recordName: hostName,
+        target: route53.RecordTarget.fromAlias({
+          bind: () => ({
+            dnsName: lb.loadBalancerDnsName,
+            hostedZoneId: lb.loadBalancerCanonicalHostedZoneId,
+            evaluateTargetHealth: true,
+          })
+        })
+      });
+    }
 
     const applicationLoadBalanceruserPoolClient = new cognito.UserPoolClient(this, 'client', {
       userPoolClientName: 'ApplicationLoadBalancerClient',
@@ -479,7 +518,6 @@ export class LlmGatewayStack extends cdk.Stack {
       supportedIdentityProviders: [cognito.UserPoolClientIdentityProvider.COGNITO],
     });
 
-    const vpc = new ec2.Vpc(this, 'MyVPC', { });
     const flowLog = new ec2.FlowLog(this, 'FlowLog', {
       resourceType: ec2.FlowLogResourceType.fromVpc(vpc),
       trafficType: ec2.FlowLogTrafficType.ALL,
@@ -557,12 +595,6 @@ export class LlmGatewayStack extends cdk.Stack {
       hostPort: 8501
     });
 
-    const albSecurityGroup = new ec2.SecurityGroup(this, 'ALBSecurityGroup', {
-      securityGroupName: 'LlmGatewayALB-sg',
-      vpc,
-      allowAllOutbound: true,
-    });
-
     albSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80));
     albSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443));
 
@@ -587,12 +619,6 @@ export class LlmGatewayStack extends cdk.Stack {
       }
     });
 
-    const lb = new elbv2.ApplicationLoadBalancer(this, 'LB', {
-      vpc,
-      internetFacing: true,
-      securityGroup: albSecurityGroup,
-    });
-
     const targetGroup = new elbv2.ApplicationTargetGroup(this, 'AppTG', {
       vpc,
       targetGroupName: 'LlmGatewayUI',
@@ -601,6 +627,90 @@ export class LlmGatewayStack extends cdk.Stack {
       port: 8501,
       targets: [service]
     });
+
+    if (!this.uiCertArn) {
+      // Define the IAM Role for Lambda
+      const lambdaRole = new iam.Role(this, 'LambdaExecutionRole', {
+        assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+        managedPolicies: [
+          iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole')
+        ],
+        inlinePolicies: {
+          LambdaPolicy: new iam.PolicyDocument({
+            statements: [
+              new iam.PolicyStatement({
+                effect: iam.Effect.ALLOW,
+                actions: ['acm:ImportCertificate'],
+                resources: ['*']
+              })
+            ]
+          })
+        }
+      });
+
+      // Define the Lambda Function
+      const lambdaFunction = new lambda.Function(this, 'SelfSignedSSLCertificateCreateLambda', {
+        runtime: lambda.Runtime.PYTHON_3_12,
+        handler: 'create.handler',
+        code: lambda.Code.fromAsset(
+          path.join(__dirname, "../../lambdas/self-signed-certificate/")
+        ),
+        role: lambdaRole,
+        functionName: `${cdk.Stack.of(this).stackName}SelfSignedSSLCertificateCreate`,
+        timeout: cdk.Duration.seconds(60)
+      });
+
+      // Define the Custom Resource
+      const sslCertificate = new cdk.CustomResource(this, 'SelfSignedSSLCertificate', {
+        serviceToken: lambdaFunction.functionArn,
+        
+      });
+
+      new cdk.CfnOutput(this, 'SelfSignedSSLCertificateOutput', {
+        value: sslCertificate.ref
+      });
+
+      // Define the IAM Role for Delete Lambda
+      const lambdaDeleteRole = new iam.Role(this, 'LambdaDeleteExecutionRole', {
+        assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+        managedPolicies: [
+          iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole')
+        ],
+        inlinePolicies: {
+          LambdaDeletePolicy: new iam.PolicyDocument({
+            statements: [
+              new iam.PolicyStatement({
+                effect: iam.Effect.ALLOW,
+                actions: ['acm:DeleteCertificate'],
+                resources: [sslCertificate.ref]
+              })
+            ]
+          })
+        }
+      });
+
+      // Define the Delete Lambda Function
+      const lambdaDeleteFunction = new lambda.Function(this, 'SelfSignedSSLCertificateDeleteLambda', {
+        runtime: lambda.Runtime.PYTHON_3_12,
+        handler: 'delete.handler',
+        code: lambda.Code.fromAsset(
+          path.join(__dirname, "../../lambdas/self-signed-certificate/")
+        ),
+        role: lambdaDeleteRole,
+        functionName: `${cdk.Stack.of(this).stackName}SelfSignedSSLCertificateDelete`,
+        timeout: cdk.Duration.seconds(60)
+      });
+
+      // Define the Custom Resource for Delete
+      const sslCertificateDelete = new cdk.CustomResource(this, 'SelfSignedSSLCertificateDelete', {
+        serviceToken: lambdaDeleteFunction.functionArn,
+        properties: {
+          CertificateArn: sslCertificate.ref
+        }
+      });
+
+      this.uiCertArn = sslCertificate.ref
+    }
 
     const appListener = lb.addListener('appListener', {
       port: 443,
@@ -622,7 +732,6 @@ export class LlmGatewayStack extends cdk.Stack {
       })
     });
 
-
     appListener.addAction("authenticate-cognito", {
       priority: 10,
       conditions: [elbv2.ListenerCondition.pathPatterns(["/", "/*"])],
@@ -633,29 +742,6 @@ export class LlmGatewayStack extends cdk.Stack {
         next: elbv2.ListenerAction.forward([targetGroup])
       })
     });
-
-    const domainParts = this.uiDomainName.split(".");
-    const domainName = domainParts.slice(1).join(".");
-    const hostName = domainParts[0];
-
-    // Retrieve the existing Route 53 hosted zone
-    const hostedZone = route53.HostedZone.fromLookup(this, 'Zone', {
-      domainName: `${domainName}.`
-    });
-
-    // Create Route 53 A record pointing to the ALB
-    new route53.ARecord(this, 'AliasRecord', {
-      zone: hostedZone,
-      recordName: hostName,
-      target: route53.RecordTarget.fromAlias({
-        bind: () => ({
-          dnsName: lb.loadBalancerDnsName,
-          hostedZoneId: lb.loadBalancerCanonicalHostedZoneId,
-          evaluateTargetHealth: true,
-        })
-      })
-    });
-
 
     // Create endpoints
     api.addRoute("$connect", {
