@@ -37,6 +37,7 @@ cd -
 echo $UI_CERT_ARN
 echo $UI_DOMAIN_NAME
 echo $ECR_STREAMLIT_REPOSITORY
+echo $METADATA_URL_COPIED_FROM_AZURE_AD
 cd ../streamlit
 ./build_and_deploy.sh $ECR_STREAMLIT_REPOSITORY
 
@@ -57,6 +58,7 @@ cdk deploy "$STACK_NAME" \
 --context ecrStreamlitRepository=$ECR_STREAMLIT_REPOSITORY \
 --context uiCertArn=$UI_CERT_ARN \
 --context uiDomainName=$UI_DOMAIN_NAME \
+--context metadataURLCopiedFromAzureAD=$METADATA_URL_COPIED_FROM_AZURE_AD \
 --outputs-file ./outputs.json
 
 # Check if the deployment was successful
