@@ -34,6 +34,15 @@ cd ../lambdas/ws
 #navigate back to the original directory
 cd -
 
+echo $UI_CERT_ARN
+echo $UI_DOMAIN_NAME
+echo $ECR_STREAMLIT_REPOSITORY
+cd ../streamlit
+./build_and_deploy.sh $ECR_STREAMLIT_REPOSITORY
+
+#navigate back to the original directory
+cd -
+
 # Deploy the CDK stack
 echo "Deploying the CDK stack..."
 cdk deploy "$STACK_NAME" \
@@ -45,6 +54,9 @@ cdk deploy "$STACK_NAME" \
 --context maxTokens=$DEFAULT_MAX_TOKENS \
 --context defaultTemp=$DEFAULT_TEMP \
 --context ecrWebsocketRepository=$ECR_WEBSOCKET_REPOSITORY \
+--context ecrStreamlitRepository=$ECR_STREAMLIT_REPOSITORY \
+--context uiCertArn=$UI_CERT_ARN \
+--context uiDomainName=$UI_DOMAIN_NAME \
 --outputs-file ./outputs.json
 
 # Check if the deployment was successful
@@ -69,6 +81,12 @@ if [ $? -eq 0 ]; then
         --function-name $WEBSOCKET_LAMBDA_FUNCTION_NAME \
         --image-uri $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_WEBSOCKET_REPOSITORY:latest \
         --region $AWS_REGION
+
+    aws ecs update-service \
+        --cluster LlmGatewayUI \
+        --service LlmGatewayUI \
+        --force-new-deployment \
+        --desired-count 1
 else
     echo "Deployment failed"
 fi
