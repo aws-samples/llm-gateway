@@ -73,8 +73,7 @@ The chatbot in this demo helps mobile network technicians summarize information 
 3. In the left sidebar, choose **Enterprise applications**.
 4. Choose **New application**.
 5. On the **Browse Azure AD Gallery** page, choose **Create your own application**.
-6. Under **What’s the name of your app?**, enter a name for your application and select **Integrate any other application you don’t find in the gallery (Non-gallery)**, as shown in Figure 2. Choose **Create**.
-![Figure 2](https://d2908q01vomqb2.cloudfront.net/22d200f87f8670dbdb3e253a90eee5098477c95c23d/2021/11/09/Amazon-Cognito-federated-authentication-2.png)
+6. Under **What’s the name of your app?**, enter a name for your application and select **Integrate any other application you don’t find in the gallery (Non-gallery)**, as shown in <a href="https://d2908q01vomqb2.cloudfront.net/22d200f8670dbdb3e253a90eee5098477c95c23d/2021/11/09/Amazon-Cognito-federated-authentication-2.png" target="_blank">Figure 2</a>. Choose **Create**.
 
 7. It will take few seconds for the application to be created in Azure AD, then you should be redirected to the **Overview** page for the newly added application.
 **Note:** Occasionally, this step can result in a **Not Found** error, even though Azure AD has successfully created a new application. If that happens, in Azure AD navigate back to **Enterprise applications** and search for your application by name.
