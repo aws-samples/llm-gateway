@@ -40,4 +40,20 @@ NagSuppressions.addStackSuppressions(stack, [
     id: "AwsSolutions-APIG1",
     reason: "Websockets don't have this option yet.",
   },
+  {
+    id:"AwsSolutions-IAM4",
+    reason: "Managed policies are fine imo.",
+  },
+  {
+    id:"AwsSolutions-ECS2",
+    reason: "I agree that SystemsManger might be better for this, but even if I made that change, I would still have to pass in the systems manager variable name as an environment variable, which would still trigger this error.",
+  },
+  {
+    id:"AwsSolutions-EC23",
+    reason: "This warning is for a security group containing my application load balancer, which needs to be generally accesible from the internet."
+  },
+  {
+    id:"AwsSolutions-ELB2",
+    reason: "Not needed at this point imo."
+  }
 ]);
