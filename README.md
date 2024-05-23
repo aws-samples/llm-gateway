@@ -80,7 +80,7 @@ The chatbot in this demo helps mobile network technicians summarize information 
 8. On the **Getting started** page, in the **Set up single sign on** tile, choose **Get started**, as shown in <a href="https://d2908q01vomqb2.cloudfront.net/22d200f8670dbdb3e253a90eee5098477c95c23d/2021/11/10/Amazon-Cognito-federated-authentication-3r.png" target="_blank">Figure 3</a>.
 9. On the next screen, select **SAML**.
 10. Scroll down to the SAML Signing Certificate section, and copy the App Federation Metadata Url by choosing the copy into clipboard icon (highlighted with red arrow in <a href="https://d2908q01vomqb2.cloudfront.net/22d200f8670dbdb3e253a90eee5098477c95c23d/2021/11/09/Amazon-Cognito-federated-authentication-6.png" target="_blank">Figure 6</a>). In your `.env` file, use this value for the `METADATA_URL_COPIED_FROM_AZURE_AD` variable
-11. Complete the deployment steps in the `Deployment Steps` section
+11. Complete the deployment steps in the `Deployment Steps` section of this ReadMe
 12. In the output of the deployment stack, you will see `LlmGatewayStack.EntityId` and `LlmGatewayStack.ReplyURL`. Keep these in a text editor, as you'll need them in the next step.
 13. Make sure you're back in the **SAML** page you were on in steps 9 and 10
 14. In the middle pane under **Set up Single Sign-On with SAML**, in the **Basic SAML Configuration** section, choose the edit <a href="https://d2908q01vomqb2.cloudfront.net/22d200f8670dbdb3e253a90eee5098477c95c23d/2021/11/09/pencil2.png" target="_blank">icon</a>.
@@ -95,10 +95,10 @@ The chatbot in this demo helps mobile network technicians summarize information 
 1. `cd` into `cdk`
 2. Run `cp template.env .env`
 3. In your new `.env` file, make sure `API_GATEWAY_TYPE` is set to `"websocket"`.
-4. Set the `UI_CERT_ARN` to the ARN of the certificate you created in the `Creating your certificate` section.
-5. Set the `UI_DOMAIN_NAME` to the sub domain you created in the `Creating your certificate` section.
+4. Set the `UI_CERT_ARN` to the ARN of the certificate you created in the `Creating your certificate` section of this ReadMe.
+5. Set the `UI_DOMAIN_NAME` to the sub domain you created in the `Creating your certificate` section of this ReadMe.
 6. If you want to use OpenAI LLMs, make sure to populate `API_KEY` with your OpenAI api key
-7. If you want to use AzureAd for authentication, follow the steps in  `Azure Ad Authentication Steps` and make sure to populate the `METADATA_URL_COPIED_FROM_AZURE_AD` in your `.env` file
+7. If you want to use AzureAd for authentication, follow the steps in the `Azure Ad Authentication Steps` section of this ReadMe and make sure to populate the `METADATA_URL_COPIED_FROM_AZURE_AD` in your `.env` file
 8. Run `./deploy.sh`
 9. If you need to make adjustments to your lambda code, simply re-run `./deploy.sh`
 10. If you are using AzureAd for authentication, skip this step. To use Cognito Authentication against the API Gateway WebSocket, you'll need a Cognito user. Create one with your desired username and password with the `python3 create_cognito_user.py` script. Once you do that, Streamlit will automatically use the user you created to authenticate to the API Gateway WebSocket.
