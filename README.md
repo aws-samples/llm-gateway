@@ -44,11 +44,11 @@ The chatbot in this demo helps mobile network technicians summarize information 
 
 2. Complete the following steps to create a Route53 HostedZone and domain for this project:
 * Fill in the following:
-* Are you in AWS or CDO? , Select AWS
-* Select your organization, Select people
-* Owner Bindle ID, Input your Bindle id (find it here: Bindle UI)
-* Create a role using the instructions described here (https://w.amazon.com/bin/view/SuperNova/PreOnboardingSteps) and put that in the IAM Role ARN for SuperNova
-* Hosted Zone ID (Optional) , leave blank
+    * Are you in AWS or CDO? , Select AWS
+    * Select your organization, Select people
+    * Owner Bindle ID, Input your Bindle id (find it here: Bindle UI)
+    * Create a role using the instructions described here (https://w.amazon.com/bin/view/SuperNova/PreOnboardingSteps) and put that in the IAM Role ARN for SuperNova
+    * Hosted Zone ID (Optional) , leave blank
 
 3. Verify that a HostedZone has been created in Route53 -> Hosted zones
 4. Complete the following steps to create an verify a certificate using the domain you just created
