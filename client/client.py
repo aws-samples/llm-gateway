@@ -4,14 +4,27 @@ import asyncio
 import threading
 import queue
 import websockets
+import warnings
+import langchain
+# langchain.__version__
+import boto3
+from langchain.chat_models import BedrockChat
+
+from langchain.chains import NeptuneOpenCypherQAChain
+from langchain.graphs import NeptuneGraph
+from streamlit_float import *
 
 st.set_page_config(layout="wide")
+float_init(theme=True, include_unstable_primary=False)
 
+# Initialize session state.
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "estimated_usage" not in st.session_state:
+    st.session_state.estimated_usage = 0
+# Inialize global variables.
 quota_limit = 0.0001
-
-# Initialize the variable
 is_streaming = False
-
 
 ################################################################################
 # BEGIN - Lambda code - This needs to be migrated to the cloud
@@ -146,60 +159,83 @@ def update_metrics(s, type_):
 
 # Create two columns
 main_column, right_column = st.columns([3, 1])
+if "is_responding" not in st.session_state:
+    st.session_state.is_responding = False
+
+
+def chat_content():
+    # append the prompt and the role (user) as a message to the session state
+    if "answer" in st.session_state:
+        st.session_state.messages.append({"role": "assistant", "content": st.session_state.answer or "Quota limit exceeded." })
+    if len(messages) == 0:
+        st.session_state.messages.append({"role": "user", "content": st.session_state.prompt})
+    st.session_state.is_responding = True
+
 
 with main_column:
+    st.title(f""":rainbow[LLM Gateway API Sample]""")
+
     if st.session_state.model_id == None:
         initialize_dependent_values()
 
-    # Title displayed on the streamlit web app
-    st.title(f""":rainbow[LLM Gateway API Sample]""")
-    # configuring values for session state
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-    if "estimated_usage" not in st.session_state:
-        st.session_state.estimated_usage = 0
-    # writing the message that is stored in session state
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+    if messages := st.session_state.messages:
+        if len(messages) > 1:
+            st.session_state.messages.append({"role": "user", "content": st.session_state.prompt})
 
-    # evaluating st.chat_input and determining if a prompt has been input
-    if prompt := st.chat_input("Ask me about anything..."):
-        # with the user icon, write the prompt to the front end
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        # append the prompt and the role (user) as a message to the session state
-        st.session_state.messages.append({"role": "user", "content": prompt})
+        if len(messages) > 1:
+            print(st.session_state.messages)
+            for message in st.session_state.messages[:-1]:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
+
+
+    if st.session_state.is_responding:
+        # writing the message that is stored in session state
+        if len(messages) > 0:
+            message = st.session_state.messages[-1]
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
         # respond as the assistant with the answer
         with st.chat_message("assistant"):
             q = queue.Queue()
 
             if has_quota():
                 # Update the input metrics.
-                update_metrics(prompt, "input")
+                update_metrics(st.session_state.prompt, "input")
 
                 # Start the background thread
 
                 print(f'st.session_state.model_id: {st.session_state.model_id}')
                 thread = threading.Thread(
-                    target=bridge, args=(llm_answer_streaming(prompt, st.session_state.model_id), q)
+                    target=bridge,
+                    args=(
+                        llm_answer_streaming(
+                            st.session_state.prompt,
+                            st.session_state.model_id
+                        ),
+                        q,
+                    )
                 )
                 thread.start()
                 # making sure there are no messages present when generating the answer
                 message_placeholder = st.empty()
                 # calling the invoke_llm_with_streaming to generate the answer as a generator object, and using
                 # st.write stream to perform the actual streaming of the answer to the front end
-                answer = st.write_stream(sync_generator(q))
+                st.session_state.answer = st.write_stream(sync_generator(q))
             else:
-                answer = st.write("Quota limit exceeded.")
+                st.session_state.answer = st.write("Quota limit exceeded.")
+            is_responding = False
 
-        # appending the final answer to the session state
-        if has_quota():
-            update_metrics(answer, "output")
-            print(st.session_state.estimated_usage)
-            st.session_state.estimated_usage += metrics["input_cost"]
-            st.session_state.estimated_usage += metrics["output_cost"]
-        st.session_state.messages.append({"role": "assistant", "content": answer})
+            # appending the final answer to the session state
+            if "answer" in st.session_state:
+                if has_quota():
+                    update_metrics(st.session_state.answer, "output")
+                    print(st.session_state.estimated_usage)
+                    st.session_state.estimated_usage += metrics["input_cost"]
+                    st.session_state.estimated_usage += metrics["output_cost"]
+
+    st.chat_input("Ask me about anything...", key='prompt', on_submit=chat_content)
+
 
 with right_column:
     # Control items
