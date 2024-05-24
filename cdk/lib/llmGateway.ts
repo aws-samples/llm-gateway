@@ -53,6 +53,10 @@ export class LlmGatewayStack extends cdk.Stack {
   uiCertArn = String(this.node.tryGetContext("uiCertArn"));
   uiDomainName = String(this.node.tryGetContext("uiDomainName"));
   metadataURLCopiedFromAzureAD = this.node.tryGetContext("metadataURLCopiedFromAzureAD");
+  gitHubClientId = this.node.tryGetContext("gitHubClientId");
+  gitHubClientSecret = this.node.tryGetContext("gitHubClientSecret");
+  gitHubProxyUrl = this.node.tryGetContext("gitHubProxyUrl");
+  cognitoDomainPrefix = this.node.tryGetContext("cognitoDomainPrefix");
 
   tryGetParameter(parameterName: string, defaultValue: any = null) {
     const parameter = this.node.tryFindChild(parameterName) as cdk.CfnParameter;
@@ -477,13 +481,42 @@ export class LlmGatewayStack extends cdk.Stack {
         }
       });
       provider = cognito.UserPoolClientIdentityProvider.custom(azureAdProvider.providerName)
+    } else if(this.gitHubClientId && this.gitHubClientSecret) {
+        let gitHubProvider = new cognito.UserPoolIdentityProviderOidc(this, 'MyGitHubProvider', {
+          userPool: userPool,
+          name: "GitHub",
+          clientId: this.gitHubClientId,
+          clientSecret: this.gitHubClientSecret,
+          attributeRequestMethod: cognito.OidcAttributeRequestMethod.GET,
+          issuerUrl: this.gitHubProxyUrl,
+          scopes: ['openid', 'user'],
+          endpoints: {
+            authorization: this.gitHubProxyUrl.concat('/authorize'),
+            token: this.gitHubProxyUrl.concat('/token'),
+            userInfo: this.gitHubProxyUrl.concat('/userinfo'),
+            jwksUri: this.gitHubProxyUrl.concat('/.well-known/jwks.json')
+          },
+          attributeMapping: {
+            custom: {
+              "username": cognito.ProviderAttribute.other("sub"),
+              "email_verified": cognito.ProviderAttribute.other("email_verified"),
+            },
+            email: cognito.ProviderAttribute.other("email"),
+            fullname: cognito.ProviderAttribute.other('name'),
+            profilePicture: cognito.ProviderAttribute.other('picture'),
+            preferredUsername: cognito.ProviderAttribute.other("preferred_username"),
+            profilePage: cognito.ProviderAttribute.other("profile"),
+            lastUpdateTime: cognito.ProviderAttribute.other("updated_at"),
+            website: cognito.ProviderAttribute.other("website"),
+          }
+        }
+      )
+      provider = cognito.UserPoolClientIdentityProvider.custom(gitHubProvider.providerName)
     }
-
-    const azureAdDomainPrefix = "llmgatewaymichaeltest123"
 
     const cognitoDomain = userPool.addDomain('CognitoDomain', {
       cognitoDomain: {
-        domainPrefix: azureAdDomainPrefix,
+        domainPrefix: this.cognitoDomainPrefix,
       },
     });
 
@@ -726,7 +759,7 @@ export class LlmGatewayStack extends cdk.Stack {
 
     // Output the domain URL
     new cdk.CfnOutput(this, 'UserPoolDomain', {
-      value: `https://${azureAdDomainPrefix}.auth.${this.regionValue}.amazoncognito.com`,
+      value: `https://${this.cognitoDomainPrefix}.auth.${this.regionValue}.amazoncognito.com`,
     });
 
     const entityId = `urn:amazon:cognito:sp:${userPool.userPoolId}`;
@@ -737,7 +770,7 @@ export class LlmGatewayStack extends cdk.Stack {
     });
 
     // Reply URL for the SAML provider
-    const replyUrl = `https://${azureAdDomainPrefix}.auth.${this.regionValue}.amazoncognito.com/saml2/idpresponse`;
+    const replyUrl = `https://${this.cognitoDomainPrefix}.auth.${this.regionValue}.amazoncognito.com/saml2/idpresponse`;
 
     // Output the Reply URL
     new cdk.CfnOutput(this, 'ReplyURL', {

@@ -62,7 +62,10 @@ session_token = process_session_token()
 #st.write(f'session_token: {session_token}')
 
 if "username" in session_token:
-    username = session_token["username"]
+    if "GitHub_" in session_token["username"] and "preferred_username" in session_token:
+        username = session_token['preferred_username']
+    else:
+        username = session_token["username"]
 else:
     username = "Could not find username. Normal if you are running locally."
 
