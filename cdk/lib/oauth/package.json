@@ -1,0 +1,10 @@
+{
+    "scripts": {
+        "build": "tsc"
+    },
+    "dependencies": {
+        "aws-lambda": "^1.0.7",
+        "lambda-multipart-parser": "^1.0.1",
+        "node-fetch": "^3.3.2"
+    }
+}

@@ -38,6 +38,8 @@ echo $UI_CERT_ARN
 echo $UI_DOMAIN_NAME
 echo $ECR_STREAMLIT_REPOSITORY
 echo $METADATA_URL_COPIED_FROM_AZURE_AD
+echo $GIT_HUB_CLIENT_ID
+echo $GIT_HUB_CLIENT_SECRET
 cd ../streamlit
 ./build_and_deploy.sh $ECR_STREAMLIT_REPOSITORY
 
@@ -59,6 +61,8 @@ cdk deploy "$STACK_NAME" \
 --context uiCertArn=$UI_CERT_ARN \
 --context uiDomainName=$UI_DOMAIN_NAME \
 --context metadataURLCopiedFromAzureAD=$METADATA_URL_COPIED_FROM_AZURE_AD \
+--context gitHubClientId=$GIT_HUB_CLIENT_ID \
+--context gitHubClientSecret=$GIT_HUB_CLIENT_SECRET \
 --outputs-file ./outputs.json
 
 # Check if the deployment was successful

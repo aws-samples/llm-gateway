@@ -55,5 +55,9 @@ NagSuppressions.addStackSuppressions(stack, [
   {
     id:"AwsSolutions-ELB2",
     reason: "Not needed at this point imo."
+  },
+  {
+    id: "AwsSolutions-APIG2",
+    reason: "Validation done in lambdas."
   }
 ]);

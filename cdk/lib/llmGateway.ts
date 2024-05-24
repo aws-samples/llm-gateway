@@ -53,6 +53,8 @@ export class LlmGatewayStack extends cdk.Stack {
   uiCertArn = String(this.node.tryGetContext("uiCertArn"));
   uiDomainName = String(this.node.tryGetContext("uiDomainName"));
   metadataURLCopiedFromAzureAD = this.node.tryGetContext("metadataURLCopiedFromAzureAD");
+  gitHubClientId = this.node.tryGetContext("gitHubClientId");
+  gitHubClientSecret = this.node.tryGetContext("gitHubClientSecret");
 
   tryGetParameter(parameterName: string, defaultValue: any = null) {
     const parameter = this.node.tryFindChild(parameterName) as cdk.CfnParameter;
@@ -477,6 +479,94 @@ export class LlmGatewayStack extends cdk.Stack {
         }
       });
       provider = cognito.UserPoolClientIdentityProvider.custom(azureAdProvider.providerName)
+    } else if(this.gitHubClientId && this.gitHubClientSecret) {
+        const lambdaRole = new iam.Role(this, "LlmGatewayLambdaRole", {
+          assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
+          roleName: "LlmGatewayLambdaRole",
+          inlinePolicies: {
+            LambdaPermissions: new iam.PolicyDocument({
+              statements: [
+                new iam.PolicyStatement({
+                  sid: "WriteToCloudWatchLogs",
+                  effect: iam.Effect.ALLOW,
+                  actions: [
+                    "logs:CreateLogGroup",
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents",
+                  ],
+                  resources: ["*"],
+                }),
+              ],
+            }),
+          },
+        })
+        const tokenHandler = new lambdaNode.NodejsFunction(this, "TokenHandlerFunction", {
+          runtime: lambda.Runtime.NODEJS_20_X,
+          entry: path.join(__dirname, "oauth/token.ts"),
+          architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
+          bundling: {
+            minify: false,
+          },
+          role: lambdaRole
+        });
+
+        const userHandler = new lambdaNode.NodejsFunction(this, "UserHandlerFunction", {
+          runtime: lambda.Runtime.NODEJS_20_X,
+          entry: path.join(__dirname, "oauth/token.ts"),
+          architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
+          bundling: {
+            minify: false,
+          },
+          role: lambdaRole
+        });
+
+        const api = new apigw.RestApi(this, 'MyApi', {
+          restApiName: 'Service API',
+          description: 'This service serves the token and user data.',
+        });
+
+        // Create a resource for the token handler
+        const tokenResource = api.root.addResource('token');
+        tokenResource.addMethod('POST', new apigw.LambdaIntegration(tokenHandler), {
+          // Additional method options can be provided here
+        });
+
+        // Create a resource for the user handler
+        const userResource = api.root.addResource('user');
+        userResource.addMethod('GET', new apigw.LambdaIntegration(userHandler), {
+          // Additional method options can be provided here
+        });
+
+        let gitHubProvider = new cognito.UserPoolIdentityProviderOidc(this, 'MyGitHubProvider', {
+          userPool: userPool,
+          name: "GitHub",
+          clientId: this.gitHubClientId,
+          clientSecret: this.gitHubClientSecret,
+          attributeRequestMethod: cognito.OidcAttributeRequestMethod.GET,
+          issuerUrl: "https://github.com",
+          scopes: ['openid', 'user'],
+          endpoints: {
+            authorization: "https://github.com/login/oauth/authorize",
+            token: api.url.concat('token'),
+            userInfo: api.url.concat('user'),
+            jwksUri: api.url.concat('user')
+          },
+          attributeMapping: {
+            // custom: {
+            //   "username": cognito.ProviderAttribute.other("sub"),
+            //   "email_verified": cognito.ProviderAttribute.other("email_verified"),
+            // },
+            email: cognito.ProviderAttribute.other("email"),
+            fullname: cognito.ProviderAttribute.other('name'),
+            profilePicture: cognito.ProviderAttribute.other('avatar_url'),
+            // preferredUsername: cognito.ProviderAttribute.other("preferred_username"),
+            // profilePage: cognito.ProviderAttribute.other("profile"),
+            // lastUpdateTime: cognito.ProviderAttribute.other("updated_at"),
+            // website: cognito.ProviderAttribute.other("website"),
+          }
+        }
+      )
+      provider = cognito.UserPoolClientIdentityProvider.custom(gitHubProvider.providerName)
     }
 
     const azureAdDomainPrefix = "llmgatewaymichaeltest123"
