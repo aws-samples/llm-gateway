@@ -40,6 +40,8 @@ echo $ECR_STREAMLIT_REPOSITORY
 echo $METADATA_URL_COPIED_FROM_AZURE_AD
 echo $GIT_HUB_CLIENT_ID
 echo $GIT_HUB_CLIENT_SECRET
+echo $GIT_HUB_PROXY_URL
+echo $COGNTIO_DOMAIN_PREFIX
 cd ../streamlit
 ./build_and_deploy.sh $ECR_STREAMLIT_REPOSITORY
 
@@ -63,6 +65,8 @@ cdk deploy "$STACK_NAME" \
 --context metadataURLCopiedFromAzureAD=$METADATA_URL_COPIED_FROM_AZURE_AD \
 --context gitHubClientId=$GIT_HUB_CLIENT_ID \
 --context gitHubClientSecret=$GIT_HUB_CLIENT_SECRET \
+--context gitHubProxyUrl=$GIT_HUB_PROXY_URL \
+--context cognitoDomainPrefix=$COGNTIO_DOMAIN_PREFIX \
 --outputs-file ./outputs.json
 
 # Check if the deployment was successful
