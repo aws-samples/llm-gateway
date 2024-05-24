@@ -40,25 +40,7 @@ The chatbot in this demo helps mobile network technicians summarize information 
 
 ##### Domain and Certifcate, AWS Internal
 
-1. Go to this page: https://supernova.amazon.dev/
-
-2. Complete the following steps to create a Route53 HostedZone and domain for this project:
-* Fill in the following:
-    * Are you in AWS or CDO? , Select AWS
-    * Select your organization, Select people
-    * Owner Bindle ID, Input your Bindle id (find it here: Bindle UI)
-    * Create a role using the instructions described here (https://w.amazon.com/bin/view/SuperNova/PreOnboardingSteps) and put that in the IAM Role ARN for SuperNova
-    * Hosted Zone ID (Optional) , leave blank
-
-3. Verify that a HostedZone has been created in Route53 -> Hosted zones
-4. Complete the following steps to create an verify a certificate using the domain you just created
-* Go to Certificate Manager (ACM) -> Request a certificate
-* Select "Request a public certificate"
-* In Fully qualified domain name, put in your domain (should be something like username.people.aws.dev)
-* Click "Add another name to this Certficate", and add a sub domain (should be something like dashboard.username.people.aws.dev)
-* Click "Request"
-5. Go to your newly created certificate in AWS Certificate Manager -> Certificates, and click "Create records in Route 53"
-
+1. Reach out to mirodrr for instructions on this
 
 ##### Domain and Certificate, AWS Customer
 
