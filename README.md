@@ -109,10 +109,11 @@ The chatbot in this demo helps mobile network technicians summarize information 
 6. Set the `UI_DOMAIN_NAME` to the sub domain you created in the `Creating your certificate` section of this ReadMe.
 7. If you want to use OpenAI LLMs, make sure to populate `API_KEY` with your OpenAI api key
 8. If you want to use AzureAd for authentication, follow the steps in the `Azure Ad Authentication Steps` section of this ReadMe and make sure to populate the `METADATA_URL_COPIED_FROM_AZURE_AD` in your `.env` file
-9. Run `./deploy.sh`
-10. If you need to make adjustments to your lambda code, simply re-run `./deploy.sh`
-11. If you are using AzureAd for authentication, skip this step. To use Cognito Authentication against the API Gateway WebSocket, you'll need a Cognito user. Create one with your desired username and password with the `python3 create_cognito_user.py` script. Once you do that, Streamlit will automatically use the user you created to authenticate to the API Gateway WebSocket.
-12. Go to the url in the `LlmGatewayStack.StreamlitUiUrl` stack output
+9. If you want to use GitHub for authentication, follow the steps in the `GitHub Authentication Steps` section of this ReadMe and make sure to populate `GIT_HUB_CLIENT_ID`, `GIT_HUB_CLIENT_SECRET`, and `GIT_HUB_PROXY_URL` in your `.env` file
+10. Run `./deploy.sh`
+11. If you need to make adjustments to your lambda code, simply re-run `./deploy.sh`
+12. If you are using AzureAd or GitHub for authentication, skip this step. To use Cognito Authentication against the API Gateway WebSocket, you'll need a Cognito user. Create one with your desired username and password with the `python3 create_cognito_user.py` script. Once you do that, Streamlit will automatically use the user you created to authenticate to the API Gateway WebSocket.
+13. Go to the url in the `LlmGatewayStack.StreamlitUiUrl` stack output
 
 ### Deployment settings
 
