@@ -1,5 +1,4 @@
 import streamlit as st
-from invoke_llm_with_streaming import llm_answer_streaming
 import asyncio
 import threading
 import queue
@@ -9,6 +8,8 @@ import boto3
 from streamlit_float import *
 from streamlit.web.server.websocket_headers import _get_websocket_headers
 import jwt
+from invoke_llm_with_streaming import llm_answer_streaming
+from invoke_llm_with_streaming import thread_safe_session_state
 
 st.set_page_config(layout="wide")
 float_init(theme=True, include_unstable_primary=False)
@@ -19,9 +20,8 @@ if "messages" not in st.session_state:
 if "estimated_usage" not in st.session_state:
     st.session_state.estimated_usage = 0
 # Inialize global variables.
-quota_limit = 0.0001
 
-quota_limit = 0.0001
+quota_limit = 0.1000
 is_streaming = False
 
 ################################################################################
@@ -171,14 +171,19 @@ def sync_generator(sync_queue):
 
 def update_metrics(s, type_):
     print(metrics)
-    metrics[f"n_{type_}_tokens"] = len(get_estimated_tokens(s))
-    metrics[f"{type_}_cost"] = estimate_cost(
-        "anthropic.claude-instant",
-        "us-east-1",
-        type_,
-        s,
-        use_cache=True
-    )
+    #Needed for switching models and refreshes to work correctly
+    if s:
+        metrics[f"n_{type_}_tokens"] = len(get_estimated_tokens(s))
+        metrics[f"{type_}_cost"] = estimate_cost(
+            "anthropic.claude-instant",
+            "us-east-1",
+            type_,
+            s,
+            use_cache=True
+        )
+    else:
+        metrics[f"{type_}_cost"] = 0
+        metrics[f"n_{type_}_tokens"] = 0
     print(metrics)
 
 
@@ -196,8 +201,22 @@ def chat_content():
         st.session_state.messages.append({"role": "user", "content": st.session_state.prompt})
     st.session_state.is_responding = True
 
+#Needed for switching models and refreshes to work correctly
+def clear_chat_id():
+    if thread_safe_session_state.get("chat_id"): 
+       thread_safe_session_state.delete("chat_id")
+
 with main_column:
     st.title(f""":rainbow[LLM Gateway API Sample]""")
+
+    #Needed for switching models and refreshes to work correctly
+    if "prompt" not in st.session_state or not st.session_state.prompt:
+        st.session_state.is_responding = False
+        st.session_state.messages = []
+        if "answer" in st.session_state:
+            del st.session_state.answer
+        if thread_safe_session_state.get("chat_id"):
+            thread_safe_session_state.delete("chat_id")
 
     if st.session_state.model_id == None:
         initialize_dependent_values()
@@ -268,8 +287,10 @@ with right_column:
     st.header("Usage Statistics")
     # Your usage statistics functionality goes here
 
-    provider_options = ["Amazon Bedrock", "Azure & OpenAI"]
-    provider = st.selectbox("Provider", provider_options)
+    provider_options = ["Amazon Bedrock", "Azure & OpenAI", "Google"]
+
+    #Need clear_chat_id for switching models to work correctly
+    provider = st.selectbox("Provider", provider_options, on_change=clear_chat_id)
 
     model_map = {
             "Claude 3 Sonnet": "anthropic.claude-3-sonnet-20240229-v1:0",
@@ -278,7 +299,8 @@ with right_column:
             "Amazon Titan G1 Express": "amazon.titan-text-express-v1",
             "Mixtral 8x7B Instruct": "mistral.mixtral-8x7b-instruct-v0:1",
             "OpenAI GPT 3.5": "gpt-3.5-turbo",
-            "OpenAI GPT 4": "gpt-4-turbo"
+            "OpenAI GPT 4": "gpt-4-turbo",
+            "Google Gemini Pro": "gemini-pro"
         }
 
     if provider == "Amazon Bedrock":
@@ -293,10 +315,14 @@ with right_column:
     elif provider == "Azure & OpenAI":
         # Model dropdown
         model_options = ["OpenAI GPT 3.5", "OpenAI GPT 4"]
+    elif provider == "Google":
+        model_options = ["Google Gemini Pro"]
 
+    #Need clear_chat_id for switching models to work correctly
     selected_model = st.session_state.model_selection = st.selectbox(
             "Select Model",
             options=model_options,
+            on_change=clear_chat_id
         )
 
     st.session_state.model_id = model_map[selected_model]
@@ -318,6 +344,7 @@ with right_column:
     - User: {username}
     - Quota Plan: Daily
     - Estimated usage for this period: \$ {estimated_usage_str} / \$ {quota_limit}
+    - ChatId: {thread_safe_session_state.get("chat_id")}
     """)
 
     n_input_tokens = metrics["n_input_tokens"]

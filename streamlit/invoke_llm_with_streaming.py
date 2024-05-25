@@ -24,57 +24,7 @@ bedrock = boto3.client('bedrock-runtime', region, endpoint_url=f'https://bedrock
                        config=config)
 
 WebSocketURL = os.environ["WebSocketURL"]
-
-# resources_file_path = '../cdk/resources.txt'
-# scripts_resources_file_path = '../scripts/resources.txt'
-# Initialize variables to hold the values
-# UserPoolID = None
-# UserPoolClientID = None
-# WebSocketURL = None
-# Username = None
-# Password = None
-
-# if os.path.exists(resources_file_path):
-#     # Open the file and read the contents
-#     with open(resources_file_path, 'r') as file:
-#         # Iterate over each line in the file
-#         for line in file:
-#             stripped_line = line.strip()
-#             if '=' in stripped_line:
-#                 # Split the line into key and value on the '=' character
-#                 key, value = line.strip().split('=')
-#                 # Assign the value to the appropriate variable based on the key
-#                 if key == 'UserPoolID':
-#                     UserPoolID = value
-#                 elif key == 'UserPoolClientID':
-#                     UserPoolClientID = value
-#                 elif key == 'WebSocketURL':
-#                     WebSocketURL = value
-# else:
-#     print(f"Error: The file {resources_file_path} does not exist")
-
-# if os.path.exists(scripts_resources_file_path):
-#     # Open the file and read the contents
-#     with open(scripts_resources_file_path, 'r') as file:
-#         # Iterate over each line in the file
-#         for line in file:
-#             stripped_line = line.strip()
-#             if '=' in stripped_line:
-#                 # Split the line into key and value on the '=' character
-#                 key, value = line.strip().split('=')
-#                 # Assign the value to the appropriate variable based on the key
-#                 if key == 'Username':
-#                     Username = value
-#                 elif key == 'Password':
-#                     Password = value
-# else:
-#     print(f"Error: The file {scripts_resources_file_path} does not exist")
-
-# print(f'UserPoolID: {UserPoolID}')
-# print(f'UserPoolClientID: {UserPoolClientID}')
 print(f'WebSocketURL: {WebSocketURL}')
-# print(f'Username: {Username}')
-# print(f'Password: {Password}')
 
 class ThreadSafeSessionState:
     def __init__(self):
@@ -88,28 +38,11 @@ class ThreadSafeSessionState:
     def set(self, key, value):
         with self.lock:
             self.session_state[key] = value
+    def delete(self, key):
+        with self.lock:
+            del self.session_state[key]
 
 thread_safe_session_state = ThreadSafeSessionState()
-
-# def authenticate_user(client_id, user_pool_id, username, password):
-#     client = boto3.client('cognito-idp', region_name=region)
-
-#     response = client.initiate_auth(
-#         ClientId=client_id,
-#         AuthFlow='USER_PASSWORD_AUTH',
-#         AuthParameters={
-#             'USERNAME': username,
-#             'PASSWORD': password
-#         }
-#     )
-#     return response
-
-# Use this function to get the ID token
-# def get_id_token(client_id, user_pool_id, username, password):
-#     auth_response = authenticate_user(client_id, user_pool_id, username, password)
-#     #print("auth_response:", auth_response)
-#     id_token = auth_response['AuthenticationResult']['IdToken']
-#     return id_token
 
 async def llm_answer_streaming(question, model):
     message = {"action": "sendmessage", "prompt": question, "model": model}
@@ -119,14 +52,7 @@ async def llm_answer_streaming(question, model):
     else:
         print(f'did not find chat id in context')
 
-    # id_token = get_id_token(UserPoolClientID, UserPoolID, Username, Password)
-    # headers = {
-    #     "Authorization": f"Bearer {id_token}"
-    # }
-
-    #print(f'id_token: {id_token}')
     full_url = f'{WebSocketURL}/prod'
-    #socket = await websockets.connect(full_url)#, extra_headers=headers)
 
     session = boto3.Session()
     credentials = session.get_credentials()

@@ -57,6 +57,7 @@ export class LlmGatewayStack extends cdk.Stack {
   gitHubClientSecret = this.node.tryGetContext("gitHubClientSecret");
   gitHubProxyUrl = this.node.tryGetContext("gitHubProxyUrl");
   cognitoDomainPrefix = this.node.tryGetContext("cognitoDomainPrefix");
+  googleApiKey = this.node.tryGetContext("googleApiKey");
 
   tryGetParameter(parameterName: string, defaultValue: any = null) {
     const parameter = this.node.tryFindChild(parameterName) as cdk.CfnParameter;
@@ -424,6 +425,7 @@ export class LlmGatewayStack extends cdk.Stack {
           EMBEDDINGS_MODEL: this.embeddingsModel,
           OPENSEARCH_DOMAIN_ENDPOINT: this.opensearchDomainEndpoint,
           OPENSEARCH_INDEX: "llm-rag-hackathon",
+          GOOGLE_API_KEY: this.googleApiKey
         },
         timeout: cdk.Duration.minutes(15),
         memorySize: 512,
