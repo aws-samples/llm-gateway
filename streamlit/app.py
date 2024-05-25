@@ -62,19 +62,14 @@ def process_session_token():
     )
 
 def process_access_token():
-    '''
-    WARNING: We use unsupported features of Streamlit
-             However, this is quite fast and works well with
-             the latest version of Streamlit (1.27)
-             Also, this does not verify the session token's
-             authenticity. It only decodes the token.
-    '''
     headers = _get_websocket_headers()
-    if not headers or "X-Amzn-Oidc-Accesstoken" not in headers:
-        return {}
-    return jwt.decode(
-        headers["X-Amzn-Oidc-Accesstoken"], algorithms=["ES256"], options={"verify_signature": False}
-    )
+    print(f'headers: {headers}')
+    if 'X-Amzn-Oidc-Accesstoken' not in headers:
+        print(f'returning None')
+        return None
+    access_token = headers['X-Amzn-Oidc-Accesstoken']
+    print(f'returning {access_token}')
+    return access_token
 
 session_token = process_session_token()
 #st.write(f'session_token: {session_token}')
@@ -282,7 +277,8 @@ with main_column:
                         llm_answer_streaming(
                             st.session_state.prompt,
                             st.session_state.provider_id,
-                            st.session_state.model_id
+                            st.session_state.model_id,
+                            access_token
                         ),
                         q,
                     )

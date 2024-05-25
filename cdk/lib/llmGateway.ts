@@ -550,6 +550,47 @@ export class LlmGatewayStack extends cdk.Stack {
       enableTokenRevocation: true,
     });
 
+    const authHandler = new lambdaNode.NodejsFunction(this, "AuthHandlerFunction", {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      entry: path.join(__dirname, "authorizers/websocket/index.ts"),
+      architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
+      environment: {
+        USER_POOL_ID: userPool.userPoolId,
+        APP_CLIENT_ID: applicationLoadBalanceruserPoolClient.userPoolClientId,
+      },
+      bundling: {
+        minify: false,
+      },
+      role: new iam.Role(this, "AuthHandlerRole", {
+        assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
+        roleName: "AuthHandlerRole",
+        inlinePolicies: {
+          LambdaPermissions: new iam.PolicyDocument({
+            statements: [
+              new iam.PolicyStatement({
+                sid: "WriteToCloudWatchLogs",
+                effect: iam.Effect.ALLOW,
+                actions: [
+                  "logs:CreateLogGroup",
+                  "logs:CreateLogStream",
+                  "logs:PutLogEvents",
+                ],
+                resources: ["*"],
+              }),
+            ],
+          }),
+        },
+      })
+    });
+
+    const authorizer = new apigatewayv2_auth.WebSocketLambdaAuthorizer(
+      "Authorizer",
+      authHandler,
+      {
+        identitySource: ["route.request.header.Authorization"],
+      },
+    );
+
     const vpc = new ec2.Vpc(this, 'MyVPC', { });
     const flowLog = new ec2.FlowLog(this, 'FlowLog', {
       resourceType: ec2.FlowLogResourceType.fromVpc(vpc),
@@ -575,22 +616,6 @@ export class LlmGatewayStack extends cdk.Stack {
     });
 
     ecsExecutionRole.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonECSTaskExecutionRolePolicy'));
-
-    const stageName = 'prod'; 
-
-    const connectArn = `arn:aws:execute-api:${this.regionValue}:${this.account}:${api.apiId}/${stageName}/$connect`
-
-    const disconnectArn = `arn:aws:execute-api:${this.regionValue}:${this.account}:${api.apiId}/${stageName}/$disconnect`
-
-    const sendMessageArn = `arn:aws:execute-api:${this.regionValue}:${this.account}:${api.apiId}/${stageName}/sendmessage`
-
-    const policyStatement = new iam.PolicyStatement({
-      actions: ['execute-api:Invoke'],
-      resources: [connectArn, disconnectArn, sendMessageArn],
-      effect: iam.Effect.ALLOW
-    });
-
-    ecsExecutionRole.addToPolicy(policyStatement);
 
     const taskDefinition = new ecs.FargateTaskDefinition(this, 'TaskDef', {
       memoryLimitMiB: 512,
@@ -731,7 +756,7 @@ export class LlmGatewayStack extends cdk.Stack {
     // Create endpoints
     api.addRoute("$connect", {
       integration: new WebSocketLambdaIntegration("ConnectIntegration", fn),
-      authorizer: new apigatewayv2_auth.WebSocketIamAuthorizer
+      authorizer: authorizer
     });
     api.addRoute("$disconnect", {
       integration: new WebSocketLambdaIntegration("DisconnectIntegration", fn),
