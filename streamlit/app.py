@@ -287,27 +287,30 @@ with right_column:
     st.header("Usage Statistics")
     # Your usage statistics functionality goes here
 
-    provider_options = ["Amazon Bedrock", "Azure & OpenAI", "Google"]
+    provider_options = ["Amazon Bedrock", "Azure & OpenAI", "Google", "Anthropic"]
 
     #Need clear_chat_id for switching models to work correctly
     provider = st.selectbox("Provider", provider_options, on_change=clear_chat_id)
 
     model_map = {
-            "Claude 3 Sonnet": "anthropic.claude-3-sonnet-20240229-v1:0",
-            "Claude 3 Haiku": "anthropic.claude-3-haiku-20240307-v1:0",
+            "Claude 3 Sonnet Bedrock": "anthropic.claude-3-sonnet-20240229-v1:0",
+            "Claude 3 Haiku Bedrock": "anthropic.claude-3-haiku-20240307-v1:0",
             "Llama 3": "meta.llama3-70b-instruct-v1:0",
             "Amazon Titan G1 Express": "amazon.titan-text-express-v1",
             "Mixtral 8x7B Instruct": "mistral.mixtral-8x7b-instruct-v0:1",
             "OpenAI GPT 3.5": "gpt-3.5-turbo",
             "OpenAI GPT 4": "gpt-4-turbo",
-            "Google Gemini Pro": "gemini-pro"
+            "Google Gemini Pro": "gemini-pro",
+            "Claude 3 Sonnet Anthropic": "claude-3-sonnet-20240229",
+            "Claude 3 Haiku Anthropic": "claude-3-haiku-20240307",
+            "Claude 3 Opus Anthropic": "claude-3-opus-20240229"
         }
 
     if provider == "Amazon Bedrock":
         # Model dropdown
         model_options = [
-            "Claude 3 Sonnet",
-            "Claude 3 Haiku",
+            "Claude 3 Sonnet Bedrock",
+            "Claude 3 Haiku Bedrock",
             "Llama 3",
             "Amazon Titan G1 Express",
             "Mixtral 8x7B Instruct",
@@ -317,6 +320,8 @@ with right_column:
         model_options = ["OpenAI GPT 3.5", "OpenAI GPT 4"]
     elif provider == "Google":
         model_options = ["Google Gemini Pro"]
+    elif provider == "Anthropic":
+        model_options = ["Claude 3 Sonnet Anthropic", "Claude 3 Haiku Anthropic", "Claude 3 Opus Anthropic"]
 
     #Need clear_chat_id for switching models to work correctly
     selected_model = st.session_state.model_selection = st.selectbox(

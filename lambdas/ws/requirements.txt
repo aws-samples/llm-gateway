@@ -8,3 +8,4 @@ openai==1.30.3
 langchain-google-genai==1.0.5
 pillow==10.3.0
 langchain-core==0.2.1
+langchain-anthropic==0.1.13
