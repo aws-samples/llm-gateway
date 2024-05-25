@@ -8,6 +8,9 @@ import datetime
 import json
 import logging
 import os
+from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -25,7 +28,7 @@ EMBEDDINGS_MODEL = os.environ.get("EMBEDDINGS_MODEL")
 API_KEY = os.environ.get("API_KEY", "")
 ## END ENVIORNMENT VARIABLES ###################################################
 ## BEGIN NETWORK ANALYSIS ######################################################
-
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
 
 def now():
     return datetime.datetime.now()
@@ -91,9 +94,20 @@ def get_chat_history(dynamodb_client, chat_id):
         return []
 
 
-def post_to_history(dynamodb_client, chat_id, model, requests, responses):
-    print("requests:", requests)
-    print("responses:", responses)
+def post_to_history(dynamodb_client, chat_id, model, history):
+    print(f'history: {history}')
+    requests = []
+    responses = []
+
+    for i in range(0, len(history), 2):
+        humanMessage = history[i]
+        aiMessage = history[i + 1]
+        requests.append(humanMessage.content)
+        responses.append(aiMessage.content)
+
+    print(f'requests: {requests}')
+    print(f'responses: {responses}')
+
     try:
         response = dynamodb_client.put_item(
             TableName=CHAT_HISTORY_TABLE,
@@ -132,29 +146,19 @@ def post_to_cache(dynamodb_client, node_id, prompt, responses):
 
 def append_prompt_to_history(prompt, previous_requests, previous_responses,
                              model,):
-    chat = ""
-    # Reconstruct the previous conversation, unless this is an embeddings model.
-    if "gpt" in model:
-        messages = []
-        for i in range(len(previous_requests)):
-            request = previous_requests[i]
-            response = ""
-            response = previous_responses[i]["completion"]
-            messages.append(("human", request))
-            messages.append(("assistant", response))
-        messages.append(("human", prompt))
-        return messages
-    else:
-        if "embed" not in model:
-            for i in range(len(previous_requests)):
-                request = previous_requests[i]
-                response = ""
-                response = previous_responses[i]["completion"]
-                chat = chat + f"\n\nHuman: {request}"
-                chat = chat + f"\n\nAssistant: {response}"
-    # Append the most recent prompt to the end of the chat.
-        return chat + f"\n\nHuman: {prompt}. \n\n Assistant:"
-
+    # Reconstruct the previous conversation.
+    print(f'previous_requests: {previous_requests}')
+    print(f'previous_requests: {previous_responses}')
+    messages = []
+    for i in range(len(previous_requests)):
+        request = previous_requests[i]
+        print(f'request: {request}')
+        response = previous_responses[i]
+        print(f'response: {response}')
+        messages.append(HumanMessage(content=request))
+        messages.append(AIMessage(content=response))
+    messages.append(HumanMessage(content=prompt))
+    return messages
 
 class Settings:
     def __init__(self, event, session):
@@ -256,12 +260,17 @@ def handle_message(event, table, connection_id, apigw_management_client):
 
     settings = Settings(event, session)
 
-    if settings.model.startswith("gpt"):
+    print(f'settings.model: {settings.model}')
+    if "gpt" in settings.model:
         llm_chat = ChatOpenAI(
             model=settings.model,
             api_key=API_KEY,
             temperature=0
         )
+        print(f'using ChatOpenAI')
+    elif "gemini" in settings.model:
+        llm_chat = ChatGoogleGenerativeAI(model=settings.model)
+        print(f'using ChatGoogleGenerativeAI')
     else:
         # Create a LangChain BedrockChat to stream the results.
         llm_chat = BedrockChat(
@@ -272,6 +281,7 @@ def handle_message(event, table, connection_id, apigw_management_client):
                 "temperature": 0.0,
             },
         )
+        print(f'using BedrockChat')
 
     # Set up the Websocket connection
     user_name = get_ws_user_name(table, connection_id)
@@ -382,12 +392,13 @@ def handle_message(event, table, connection_id, apigw_management_client):
             )
 
     print("Combined responses sent to websocket", full_response_json)
+
+    full_chat.append(AIMessage(content=full_completion))
     post_to_history(
         settings.dynamodb_client,
         settings.chat_id,
         settings.model,
-        requests=[settings.prompt],
-        responses=[full_response_json],
+        history=full_chat,
     )
 
     # Return success code
