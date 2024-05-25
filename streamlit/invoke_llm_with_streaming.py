@@ -44,7 +44,7 @@ class ThreadSafeSessionState:
 
 thread_safe_session_state = ThreadSafeSessionState()
 
-async def llm_answer_streaming(question, provider, model):
+async def llm_answer_streaming(question, provider, model, access_token):
     message = {"action": "sendmessage", "prompt": question, "provider": provider, "model": model}
 
     if thread_safe_session_state.get("chat_id"):
@@ -53,23 +53,12 @@ async def llm_answer_streaming(question, provider, model):
     else:
         print(f'did not find chat id in context')
 
-    full_url = f'{WebSocketURL}/prod'
-
-    session = boto3.Session()
-    credentials = session.get_credentials()
-    parsed_url = urlparse(full_url)
-    service = 'execute-api'
-
-    # Create a canonical request for signing
-    request = AWSRequest(method='GET', url=full_url, headers={'host': parsed_url.netloc})
-    SigV4Auth(credentials, service, region).add_auth(request)
-    signed_url = urlunparse([
-        parsed_url.scheme, parsed_url.netloc, parsed_url.path,
-        parsed_url.params, parsed_url.query, parsed_url.fragment
-    ])
-
+    headers = {
+        "Authorization": f"Bearer {access_token}"
+    }
     
-    async with websockets.connect(signed_url, extra_headers=request.headers.items()) as websocket:
+    print(f'websocket headers: {headers}')
+    async with websockets.connect(f'{WebSocketURL}/prod', extra_headers=headers) as websocket:
         print(f"message: {message}")
         await websocket.send(json.dumps(message))
         while True:
