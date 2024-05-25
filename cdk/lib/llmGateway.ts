@@ -40,7 +40,6 @@ export class LlmGatewayStack extends cdk.Stack {
   defaultTemp = String(this.node.tryGetContext("defaultTemp") || 0.0);
   hasIamAuth = String(this.node.tryGetContext("useIamAuth")).toLowerCase() == "true";
   regionValue = this.region;
-  apiKey = String(this.node.tryGetContext("apiKey"));
   useApiKey = String(this.node.tryGetContext("useApiKey")).toLowerCase() == "true";
   wsEcrRepoName = String(this.node.tryGetContext("ecrWebsocketRepository"));
   opensearchDomainEndpoint = process.env.OPENSEARCH_DOMAIN_ENDPOINT || "";
@@ -57,8 +56,12 @@ export class LlmGatewayStack extends cdk.Stack {
   gitHubClientSecret = this.node.tryGetContext("gitHubClientSecret");
   gitHubProxyUrl = this.node.tryGetContext("gitHubProxyUrl");
   cognitoDomainPrefix = this.node.tryGetContext("cognitoDomainPrefix");
+  openaiApiKey = String(this.node.tryGetContext("openaiApiKey"));
   googleApiKey = this.node.tryGetContext("googleApiKey");
   anthropicApiKey = this.node.tryGetContext("anthropicApiKey");
+  azureOpenaiEndpoint = this.node.tryGetContext("azureOpenaiEndpoint");
+  azureOpenaiApiKey = this.node.tryGetContext("azureOpenaiApiKey");
+  azureOpenaiApiVersion = this.node.tryGetContext("azureOpenaiApiVersion");
 
   tryGetParameter(parameterName: string, defaultValue: any = null) {
     const parameter = this.node.tryFindChild(parameterName) as cdk.CfnParameter;
@@ -422,12 +425,15 @@ export class LlmGatewayStack extends cdk.Stack {
           DEFAULT_TEMP: this.defaultTemp,
           DEFAULT_MAX_TOKENS: this.defaultMaxTokens,
           REGION: this.regionValue,
-          API_KEY: this.apiKey,
           EMBEDDINGS_MODEL: this.embeddingsModel,
           OPENSEARCH_DOMAIN_ENDPOINT: this.opensearchDomainEndpoint,
           OPENSEARCH_INDEX: "llm-rag-hackathon",
+          OPENAI_API_KEY: this.openaiApiKey,
           GOOGLE_API_KEY: this.googleApiKey,
-          ANTHROPIC_API_KEY: this.anthropicApiKey
+          ANTHROPIC_API_KEY: this.anthropicApiKey,
+          AZURE_OPENAI_ENDPOINT: this.azureOpenaiEndpoint,
+          AZURE_OPENAI_API_KEY: this.azureOpenaiApiKey,
+          OPENAI_API_VERSION: this.azureOpenaiApiVersion
         },
         timeout: cdk.Duration.minutes(15),
         memorySize: 512,
