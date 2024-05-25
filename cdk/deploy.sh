@@ -43,6 +43,7 @@ echo $GIT_HUB_CLIENT_SECRET
 echo $GIT_HUB_PROXY_URL
 echo $COGNTIO_DOMAIN_PREFIX
 echo $GOOGLE_API_KEY
+echo $ANTHROPIC_API_KEY
 cd ../streamlit
 ./build_and_deploy.sh $ECR_STREAMLIT_REPOSITORY
 
@@ -69,6 +70,7 @@ cdk deploy "$STACK_NAME" \
 --context gitHubProxyUrl=$GIT_HUB_PROXY_URL \
 --context cognitoDomainPrefix=$COGNTIO_DOMAIN_PREFIX \
 --context googleApiKey=$GOOGLE_API_KEY \
+--context anthropicApiKey=$ANTHROPIC_API_KEY \
 --outputs-file ./outputs.json
 
 # Check if the deployment was successful

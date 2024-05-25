@@ -11,6 +11,7 @@ import os
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import AIMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_anthropic import ChatAnthropic
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -271,6 +272,10 @@ def handle_message(event, table, connection_id, apigw_management_client):
     elif "gemini" in settings.model:
         llm_chat = ChatGoogleGenerativeAI(model=settings.model)
         print(f'using ChatGoogleGenerativeAI')
+    #(the Bedrock Claude models start with "anthropic", and the Anthropic Claude models start with "claude")
+    elif settings.model.startswith('claude'):
+        llm_chat = ChatAnthropic(temperature=0, model_name=settings.model)
+        print(f'using ChatAnthropic')
     else:
         # Create a LangChain BedrockChat to stream the results.
         llm_chat = BedrockChat(
