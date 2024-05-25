@@ -12,6 +12,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.messages import AIMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_anthropic import ChatAnthropic
+from langchain_openai import AzureChatOpenAI
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -26,10 +27,8 @@ DEFAULT_STOP_SEQUENCES = ["Human", "Question", "Customer", "Guru"]
 DEFAULT_TEMP = float(os.environ.get("DEFAULT_TEMP", 0.0))
 # Model selection.
 EMBEDDINGS_MODEL = os.environ.get("EMBEDDINGS_MODEL")
-API_KEY = os.environ.get("API_KEY", "")
 ## END ENVIORNMENT VARIABLES ###################################################
 ## BEGIN NETWORK ANALYSIS ######################################################
-GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
 
 def now():
     return datetime.datetime.now()
@@ -171,7 +170,11 @@ class Settings:
         # Get config from the request body.
         body = json.loads(event["body"])
         self.prompt = body["prompt"]
+
+        self.provider = body["provider"]
         self.model = body["model"]
+
+        print("Using provider:", self.provider)
         print("Using model:", self.model)
         model_kwargs = body.get("parameters", {})
 
@@ -262,21 +265,24 @@ def handle_message(event, table, connection_id, apigw_management_client):
     settings = Settings(event, session)
 
     print(f'settings.model: {settings.model}')
-    if "gpt" in settings.model:
+    if settings.provider.lower() == "openai":
         llm_chat = ChatOpenAI(
             model=settings.model,
-            api_key=API_KEY,
             temperature=0
         )
         print(f'using ChatOpenAI')
-    elif "gemini" in settings.model:
+    elif settings.provider.lower() == "google":
         llm_chat = ChatGoogleGenerativeAI(model=settings.model)
         print(f'using ChatGoogleGenerativeAI')
     #(the Bedrock Claude models start with "anthropic", and the Anthropic Claude models start with "claude")
-    elif settings.model.startswith('claude'):
+    elif settings.provider.lower() == "anthropic":
         llm_chat = ChatAnthropic(temperature=0, model_name=settings.model)
         print(f'using ChatAnthropic')
-    else:
+    elif settings.provider.lower() == "azure":
+        llm_chat = AzureChatOpenAI(
+            azure_deployment=settings.model,
+        )
+    elif settings.provider.lower() == "amazon":
         # Create a LangChain BedrockChat to stream the results.
         llm_chat = BedrockChat(
             model_id=settings.model,
@@ -287,6 +293,9 @@ def handle_message(event, table, connection_id, apigw_management_client):
             },
         )
         print(f'using BedrockChat')
+    else:
+        print("Error: Unrecognized provider")
+        return 400
 
     # Set up the Websocket connection
     user_name = get_ws_user_name(table, connection_id)

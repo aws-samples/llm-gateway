@@ -43,6 +43,9 @@ COST_DB = "data/cost_db.csv"
 if 'model_id' not in st.session_state:
     st.session_state['model_id'] = None
 
+if 'provider_id' not in st.session_state:
+    st.session_state['provider_id'] = None
+
 def process_session_token():
     '''
     WARNING: We use unsupported features of Streamlit
@@ -58,8 +61,26 @@ def process_session_token():
         headers["X-Amzn-Oidc-Data"], algorithms=["ES256"], options={"verify_signature": False}
     )
 
+def process_access_token():
+    '''
+    WARNING: We use unsupported features of Streamlit
+             However, this is quite fast and works well with
+             the latest version of Streamlit (1.27)
+             Also, this does not verify the session token's
+             authenticity. It only decodes the token.
+    '''
+    headers = _get_websocket_headers()
+    if not headers or "X-Amzn-Oidc-Accesstoken" not in headers:
+        return {}
+    return jwt.decode(
+        headers["X-Amzn-Oidc-Accesstoken"], algorithms=["ES256"], options={"verify_signature": False}
+    )
+
 session_token = process_session_token()
 #st.write(f'session_token: {session_token}')
+
+access_token = process_access_token()
+#st.write(f'access_token: {access_token}')
 
 if "username" in session_token:
     if "GitHub_" in session_token["username"] and "preferred_username" in session_token:
@@ -70,9 +91,11 @@ else:
     username = "Could not find username. Normal if you are running locally."
 
 
-def initialize_dependent_values():
-    # Initialize or reset values that are dependent on main_column
-    st.session_state['model_id'] = "anthropic.claude-3-sonnet-20240229-v1:0"  # Placeholder or default
+def initialize_model_id():
+    st.session_state['model_id'] = "anthropic.claude-3-sonnet-20240229-v1:0"
+
+def initialize_provider_id():
+    st.session_state['provider_id'] = "amazon"
 
 def get_estimated_tokens(s: str) -> int:
     """
@@ -219,7 +242,10 @@ with main_column:
             thread_safe_session_state.delete("chat_id")
 
     if st.session_state.model_id == None:
-        initialize_dependent_values()
+        initialize_model_id()
+
+    if st.session_state.provider_id == None:
+        initialize_provider_id()
 
     if messages := st.session_state.messages:
         if len(messages) > 1:
@@ -249,11 +275,13 @@ with main_column:
                 # Start the background thread
 
                 print(f'st.session_state.model_id: {st.session_state.model_id}')
+                print(f'st.session_state.provider_id: {st.session_state.provider_id}')
                 thread = threading.Thread(
                     target=bridge,
                     args=(
                         llm_answer_streaming(
                             st.session_state.prompt,
+                            st.session_state.provider_id,
                             st.session_state.model_id
                         ),
                         q,
@@ -287,41 +315,54 @@ with right_column:
     st.header("Usage Statistics")
     # Your usage statistics functionality goes here
 
-    provider_options = ["Amazon Bedrock", "Azure & OpenAI", "Google", "Anthropic"]
+    provider_options = ["Amazon Bedrock", "OpenAI", "Google", "Anthropic", "Azure"]
 
     #Need clear_chat_id for switching models to work correctly
-    provider = st.selectbox("Provider", provider_options, on_change=clear_chat_id)
+    selected_provider = st.session_state.provider_selection = st.selectbox("Provider", provider_options, on_change=clear_chat_id)
 
     model_map = {
             "Claude 3 Sonnet Bedrock": "anthropic.claude-3-sonnet-20240229-v1:0",
             "Claude 3 Haiku Bedrock": "anthropic.claude-3-haiku-20240307-v1:0",
-            "Llama 3": "meta.llama3-70b-instruct-v1:0",
+            "Llama 3 Bedrock": "meta.llama3-70b-instruct-v1:0",
             "Amazon Titan G1 Express": "amazon.titan-text-express-v1",
-            "Mixtral 8x7B Instruct": "mistral.mixtral-8x7b-instruct-v0:1",
-            "OpenAI GPT 3.5": "gpt-3.5-turbo",
-            "OpenAI GPT 4": "gpt-4-turbo",
-            "Google Gemini Pro": "gemini-pro",
+            "Mixtral 8x7B Instruct Bedrock": "mistral.mixtral-8x7b-instruct-v0:1",
+            "GPT 3.5 OpenAI": "gpt-3.5-turbo",
+            "GPT 4 OpenAI": "gpt-4-turbo",
+            "Gemini Pro Google": "gemini-pro",
             "Claude 3 Sonnet Anthropic": "claude-3-sonnet-20240229",
             "Claude 3 Haiku Anthropic": "claude-3-haiku-20240307",
-            "Claude 3 Opus Anthropic": "claude-3-opus-20240229"
+            "Claude 3 Opus Anthropic": "claude-3-opus-20240229",
+
+            #Note: Azure does not use constant model ids. Instead, you call a "Deployment" which can have any name you want. So you will need to edit all the Azure model ids to match your deployment
+            "GPT 3.5 Azure": "my-gpt35"
         }
 
-    if provider == "Amazon Bedrock":
+    provider_map = {
+        "Amazon Bedrock": "amazon",
+        "OpenAi": "openai",
+        "Google": "google",
+        "Anthropic": "anthropic",
+        "Azure": "azure",
+    }
+
+    if selected_provider == "Amazon Bedrock":
         # Model dropdown
         model_options = [
             "Claude 3 Sonnet Bedrock",
             "Claude 3 Haiku Bedrock",
-            "Llama 3",
+            "Llama 3 Bedrock",
             "Amazon Titan G1 Express",
-            "Mixtral 8x7B Instruct",
+            "Mixtral 8x7B Instruct Bedrock",
         ]
-    elif provider == "Azure & OpenAI":
+    elif selected_provider == "OpenAI":
         # Model dropdown
-        model_options = ["OpenAI GPT 3.5", "OpenAI GPT 4"]
-    elif provider == "Google":
-        model_options = ["Google Gemini Pro"]
-    elif provider == "Anthropic":
+        model_options = ["GPT 3.5 OpenAI", "GPT 4 OpenAI"]
+    elif selected_provider == "Google":
+        model_options = ["Gemini Pro Google"]
+    elif selected_provider == "Anthropic":
         model_options = ["Claude 3 Sonnet Anthropic", "Claude 3 Haiku Anthropic", "Claude 3 Opus Anthropic"]
+    elif selected_provider == "Azure":
+        model_options = ["GPT 3.5 Azure"]
 
     #Need clear_chat_id for switching models to work correctly
     selected_model = st.session_state.model_selection = st.selectbox(
@@ -331,6 +372,7 @@ with right_column:
         )
 
     st.session_state.model_id = model_map[selected_model]
+    st.session_state.provider_id = provider_map[selected_provider]
 
     # Quota limit
     if has_quota():
@@ -344,6 +386,8 @@ with right_column:
     else:
         estimated_usage_str = "0"
     st.write(f"""
+    - Provider Selected: {st.session_state.provider_selection}
+    - Provider Id: {st.session_state.provider_id}
     - Model Selected: {st.session_state.model_selection}
     - Model Id: {st.session_state.model_id}
     - User: {username}

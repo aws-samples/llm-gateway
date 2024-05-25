@@ -44,8 +44,9 @@ class ThreadSafeSessionState:
 
 thread_safe_session_state = ThreadSafeSessionState()
 
-async def llm_answer_streaming(question, model):
-    message = {"action": "sendmessage", "prompt": question, "model": model}
+async def llm_answer_streaming(question, provider, model):
+    message = {"action": "sendmessage", "prompt": question, "provider": provider, "model": model}
+
     if thread_safe_session_state.get("chat_id"):
         print(f'found chat id in context')
         message["chat_id"] = thread_safe_session_state.get("chat_id")
