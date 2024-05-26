@@ -180,7 +180,9 @@ export class LlmGatewayStack extends cdk.Stack {
   createLlmGatewayLambdaRole(
     roleName: string,
     apiId: string,
-    chatHistoryTable: dynamodb.Table
+    chatHistoryTable: dynamodb.Table,
+    apiKeyTable: dynamodb.Table,
+    apiKeyValueHashIndex: string
   ) {
     const resourceArn = null;
     return new iam.Role(this, roleName, {
@@ -218,7 +220,7 @@ export class LlmGatewayStack extends cdk.Stack {
                 "dynamodb:Scan",
                 "dynamodb:UpdateItem",
               ],
-              resources: [chatHistoryTable.tableArn],
+              resources: [chatHistoryTable.tableArn, apiKeyTable.tableArn, `${apiKeyTable.tableArn}/index/${apiKeyValueHashIndex}`],
             }),
             new iam.PolicyStatement({
               sid: "WriteToCloudWatchLogs",
@@ -390,7 +392,10 @@ export class LlmGatewayStack extends cdk.Stack {
     const lambdaRole = this.createLlmGatewayLambdaRole(
       "RestLambdaRole",
       api.restApiId,
-      chatHistoryTable
+      chatHistoryTable,
+      //ToDo: Fix this once we revisit the RestApi and bring it back to feature parity with the WebSocket API
+      chatHistoryTable,
+      "stuff"
     );
 
     // Create Lambda function from the ECR image.
@@ -482,10 +487,22 @@ export class LlmGatewayStack extends cdk.Stack {
       "connection_id"
     );
 
+    const apiKeyValueHashIndex = "ApiKeyValueHashIndex"
+    const apiKeyTable = this.createSecureDdbTableWithSortKey(
+      "ApiKeyTable",
+      "username",
+      "api_key_name",
+      apiKeyValueHashIndex, 
+      "api_key_value_hash"
+      )
+
+
     const lambdaRole = this.createLlmGatewayLambdaRole(
       "WebsocketLambda",
       api.apiId,
-      chatHistoryTable
+      chatHistoryTable,
+      apiKeyTable,
+      apiKeyValueHashIndex
     );
 
     // Create Lambda function from the ECR image
@@ -512,7 +529,8 @@ export class LlmGatewayStack extends cdk.Stack {
           AZURE_OPENAI_ENDPOINT: this.azureOpenaiEndpoint,
           AZURE_OPENAI_API_KEY: this.azureOpenaiApiKey,
           OPENAI_API_VERSION: this.azureOpenaiApiVersion,
-          COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix
+          COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix,
+          API_KEY_TABLE_NAME: apiKeyTable.tableName
         },
         timeout: cdk.Duration.minutes(15),
         memorySize: 512,
@@ -628,15 +646,6 @@ export class LlmGatewayStack extends cdk.Stack {
       ],
       enableTokenRevocation: true,
     });
-
-    const apiKeyValueHashIndex = "ApiKeyValueHashIndex"
-    const apiKeyTable = this.createSecureDdbTableWithSortKey(
-      "ApiKeyTable",
-      "username",
-      "api_key_id",
-      apiKeyValueHashIndex, 
-      "api_key_value_hash"
-      )
 
     const authHandler = new lambdaNode.NodejsFunction(this, "AuthHandlerFunction", {
       runtime: lambda.Runtime.NODEJS_20_X,
@@ -953,6 +962,11 @@ export class LlmGatewayStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'WebSocketLambdaFunctionName', {
       value: fn.functionName,
       description: 'Name of the websocket lambda function'
+    });
+
+    new cdk.CfnOutput(this, 'ApiKeyLambdaFunctionName', {
+      value: apiKeyHandler.functionName,
+      description: 'Name of the api key lambda function'
     });
 
     new cdk.CfnOutput(this, 'StreamlitUiUrl', {

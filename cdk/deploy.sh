@@ -103,18 +103,25 @@ if [ $? -eq 0 ]; then
     USER_POOL_CLIENT_ID=$(jq -r ".\"${STACK_NAME}\".UserPoolClientId" ./outputs.json)
     WEBSOCKET_URL=$(jq -r ".\"${STACK_NAME}\".WebSocketUrl" ./outputs.json)
     WEBSOCKET_LAMBDA_FUNCTION_NAME=$(jq -r ".\"${STACK_NAME}\".WebSocketLambdaFunctionName" ./outputs.json)
+    API_KEY_LAMBDA_FUNCTION_NAME=$(jq -r ".\"${STACK_NAME}\".ApiKeyLambdaFunctionName" ./outputs.json)
 
     # Write outputs to a file with modified keys and format
     echo "UserPoolID=$USER_POOL_ID" > resources.txt
     echo "UserPoolClientID=$USER_POOL_CLIENT_ID" >> resources.txt
     echo "WebSocketURL=$WEBSOCKET_URL" >> resources.txt
     echo "WebSocketLambdaFunctionName=$WEBSOCKET_LAMBDA_FUNCTION_NAME" >> resources.txt
+    echo "ApiKeyLambdaFunctionName=$API_KEY_LAMBDA_FUNCTION_NAME" >> resources.txt
 
     echo "Outputs have been written to resources.txt"
 
     aws lambda update-function-code \
         --function-name $WEBSOCKET_LAMBDA_FUNCTION_NAME \
         --image-uri $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_WEBSOCKET_REPOSITORY:latest \
+        --region $AWS_REGION
+    
+    aws lambda update-function-code \
+        --function-name $API_KEY_LAMBDA_FUNCTION_NAME \
+        --image-uri $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_API_KEY_REPOSITORY:latest \
         --region $AWS_REGION
 
     aws ecs update-service \
