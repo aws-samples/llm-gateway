@@ -14,6 +14,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_anthropic import ChatAnthropic
 from langchain_openai import AzureChatOpenAI
 import requests
+import hashlib
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -32,6 +33,7 @@ COGNITO_DOMAIN_PREFIX = os.environ.get("COGNITO_DOMAIN_PREFIX")
 ## END ENVIORNMENT VARIABLES ###################################################
 ## BEGIN NETWORK ANALYSIS ######################################################
 REGION = os.environ.get("REGION")
+API_KEY_TABLE_NAME = os.environ.get("API_KEY_TABLE_NAME", None)
 
 def now():
     return datetime.datetime.now()
@@ -241,7 +243,7 @@ def post_to_ws(string, table, connection_id, apigw_management_client):
 
 #ToDo: Use username to look up whether user has exceeded thier ratelimit
 def has_exceeded_rate_limit(user_name):
-    return True
+    return False
 
 def handle_message(event, table, connection_id, apigw_management_client):
     """
@@ -433,8 +435,71 @@ def handle_message(event, table, connection_id, apigw_management_client):
 ## END NETWORK ANALYSIS ########################################################
 ## BEGIN WEBSOCKETS ############################################################
 
+def query_by_api_key_hash(api_key_hash):
+    """
+    Query DynamoDB by api_key_value_hash using the secondary index and extract specific attributes.
 
-def get_user_info(authorization_header):
+    Args:
+        api_key_hash (str): The hash value of the API key to search for.
+
+    Returns:
+        dict: A dictionary containing the username, api_key_name, and api_key_id if found; otherwise, None.
+    """
+    # Initialize a DynamoDB resource. Make sure AWS credentials and region are configured.
+    dynamodb = boto3.resource('dynamodb')
+
+    # Access the DynamoDB table
+    table = dynamodb.Table(API_KEY_TABLE_NAME)
+
+    # Perform the query using the secondary index
+    response = table.query(
+        IndexName='ApiKeyValueHashIndex',  # The name of the secondary index
+        KeyConditionExpression='api_key_value_hash = :hash_value',
+        ExpressionAttributeValues={
+            ':hash_value': api_key_hash
+        }
+    )
+
+    # Extract the first item from the result, if any
+    items = response.get('Items', [])
+    if items:
+        item = items[0]
+        return item
+    else:
+        return None
+
+def get_user_name(authorization_header):
+    try:
+        user_info = get_user_info_cognito(authorization_header)
+        print(f'user_info: {user_info}')
+        user_name = user_info["preferred_username"]
+        return user_name
+    except:
+        user_name = get_user_name_api_key(authorization_header)
+        return user_name
+
+def extract_token(authorization_header):
+    token_parts = authorization_header.split(' ')
+    if token_parts[0] != 'Bearer' or len(token_parts) != 2:
+        raise ValueError("Invalid Authorization token format")
+    encoded_token = token_parts[1]
+    return encoded_token
+
+def hash_api_key(api_key_value):
+    """
+    Generates a SHA-256 hash of the API key value.
+    """
+    hasher = hashlib.sha256()
+    hasher.update(api_key_value.encode('utf-8'))  # Ensure the input is encoded to bytes
+    return hasher.hexdigest()
+
+def get_user_name_api_key(authorization_header):
+    api_key_value = extract_token(authorization_header)
+    hashed_api_key_value = hash_api_key(api_key_value)
+    api_key_document = query_by_api_key_hash(hashed_api_key_value)
+    return api_key_document.get('username')
+
+def get_user_info_cognito(authorization_header):
     url = f'https://{COGNITO_DOMAIN_PREFIX}.auth.{REGION}.amazoncognito.com/oauth2/userInfo'
 
     # Set the headers with the access token
@@ -461,9 +526,7 @@ def handle_connect(event, table, connection_id):
     else:
         authorization_header = headers["Authorization"]
         print(f"authorization_header: {authorization_header}")
-        user_info = get_user_info(authorization_header)
-        print(f'user_info: {user_info}')
-        user_name = user_info["preferred_username"]
+        user_name = get_user_name(authorization_header)
 
     print(f'username: {user_name}')
     """
