@@ -491,7 +491,7 @@ export class LlmGatewayStack extends cdk.Stack {
     const apiKeyTable = this.createSecureDdbTableWithSortKey(
       "ApiKeyTable",
       "username",
-      "api_key_id",
+      "api_key_name",
       apiKeyValueHashIndex, 
       "api_key_value_hash"
       )
@@ -962,6 +962,11 @@ export class LlmGatewayStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'WebSocketLambdaFunctionName', {
       value: fn.functionName,
       description: 'Name of the websocket lambda function'
+    });
+
+    new cdk.CfnOutput(this, 'ApiKeyLambdaFunctionName', {
+      value: apiKeyHandler.functionName,
+      description: 'Name of the api key lambda function'
     });
 
     new cdk.CfnOutput(this, 'StreamlitUiUrl', {

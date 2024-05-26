@@ -34,7 +34,9 @@ with st.form(key='create_api_key_form'):
                 st.success('API Key created successfully! This is your API key, copy it down as you will not be able to see it again:')
                 st.text_area("API Key", api_key_value, height=100)
             else:
-                st.error('Failed to create API key: HTTP status code ' + str(post_response.status_code))
+                response_json = post_response.json()
+                message = response_json.get("message")
+                st.error('Failed to create API key: HTTP status code ' + str(post_response.status_code) + ' Error: ' + str(message))
         else:
             st.error('Authorization failed. No access token available.')
     elif submit_button:

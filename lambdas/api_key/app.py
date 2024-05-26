@@ -7,6 +7,7 @@ import requests
 import uuid
 import secrets
 import hashlib
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -136,27 +137,35 @@ def lambda_handler(event, context):
                     "body": json.dumps({"message": "api_key_name is required"})
                 }
 
-            # Generate a unique api_key_id
-            api_key_id = str(uuid.uuid4())
-
             api_key_value = generate_api_key()
             hashed_api_key_value = hash_api_key(api_key_value)
 
             # Insert new item into DynamoDB
-            table.put_item(Item={
-                'username': username,
-                'api_key_id': api_key_id,
-                'api_key_name': api_key_name,
-                'api_key_value_hash': hashed_api_key_value 
-            })
+            table.put_item(
+                Item={
+                    'username': username,
+                    'api_key_name': api_key_name,
+                    'api_key_value_hash': hashed_api_key_value
+                },
+                ConditionExpression='attribute_not_exists(username) AND attribute_not_exists(api_key_name)'
+            )
             # Return the newly created API key details
             response['body'] = json.dumps({
                 "username": username,
                 "api_key_name": api_key_name,
-                "api_key_id": api_key_id,
                 "api_key_value": api_key_value
             })
-
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+                response = {
+                    "statusCode": 400,
+                    "body": json.dumps({"message": "Key name already exists"})
+                }
+            else:
+                response = {
+                    "statusCode": 500,
+                    "body": json.dumps({"message": str(e)})
+                }
         except Exception as e:
             response = {
                 "statusCode": 500,
@@ -165,12 +174,11 @@ def lambda_handler(event, context):
     elif http_method == 'DELETE':
         # Handle DELETE request
         params = event.get('queryStringParameters', {})
-        api_key_id = params.get('api_key_id')
-
-        if not api_key_id:
+        api_key_name = params.get('api_key_name')
+        if not api_key_name:
             return {
                 "statusCode": 400,
-                "body": json.dumps({"message": "api_key_id parameter is required"})
+                "body": json.dumps({"message": "api_key_name parameter is required"})
             }
 
         try:
@@ -178,7 +186,7 @@ def lambda_handler(event, context):
             result = table.delete_item(
                 Key={
                     'username': username,
-                    'api_key_id': api_key_id
+                    'api_key_name': api_key_name
                 }
             )
             # Return success message

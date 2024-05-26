@@ -36,7 +36,7 @@ def delete_api_key(item):
     headers = {
                 "Authorization": f"Bearer {access_token}"
             }
-    delete_response = requests.delete(ApiKeyURL, headers=headers, params={'api_key_id': item['api_key_id']})
+    delete_response = requests.delete(ApiKeyURL, headers=headers, params={'api_key_name': item['api_key_name']})
     if delete_response.status_code == 200:
         # Remove the item from session state
         st.session_state.api_keys.remove(item)
@@ -53,7 +53,7 @@ if st.session_state.api_keys:
     for item in list(st.session_state.api_keys):  # Iterate over a copy to modify the list during iteration
         col1, col2 = st.columns([4, 1])
         col1.write(f"{item['api_key_name']}")
-        if col2.button('Delete', key=item['api_key_id']):
+        if col2.button('Delete', key=item['api_key_name']):
             delete_api_key(item)
 else:
     st.write("No API Keys to display.")

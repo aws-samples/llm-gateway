@@ -11,7 +11,6 @@ const apiKeyTableName = process.env.API_KEY_TABLE_NAME
 interface ApiKeyDetails {
   username?: string;
   api_key_name?: string;
-  api_key_id?: string;
 }
 
 export const handler: APIGatewayRequestAuthorizerHandler = async (event, context) => {
@@ -40,7 +39,6 @@ export const handler: APIGatewayRequestAuthorizerHandler = async (event, context
       if (itemDetails) {
         console.log("Username:", itemDetails.username);
         console.log("API Key Name:", itemDetails.api_key_name);
-        console.log("API Key ID:", itemDetails.api_key_id);
         return allowPolicy(event.methodArn, itemDetails.username);
       } else {
         console.log("No items found for the provided API key hash.");
@@ -100,7 +98,6 @@ async function queryByApiKeyHash(apiKeyHash: string): Promise<ApiKeyDetails | nu
           return {
               username: item.username?.S,
               api_key_name: item.api_key_name?.S,
-              api_key_id: item.api_key_id?.S,
           };
       }
       return null;

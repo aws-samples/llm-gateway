@@ -443,7 +443,7 @@ def query_by_api_key_hash(api_key_hash):
         api_key_hash (str): The hash value of the API key to search for.
 
     Returns:
-        dict: A dictionary containing the username, api_key_name, and api_key_id if found; otherwise, None.
+        dict: A dictionary containing the username and api_key_name if found; otherwise, None.
     """
     # Initialize a DynamoDB resource. Make sure AWS credentials and region are configured.
     dynamodb = boto3.resource('dynamodb')
