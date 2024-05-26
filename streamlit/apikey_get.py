@@ -20,13 +20,13 @@ def get_current_timestamp():
     return (datetime.now()).timestamp()
 
 def is_expired(item):
-    if 'expiration_timestamp' in item:
+    if 'expiration_timestamp' in item and item['expiration_timestamp']:
         current_timestamp = get_current_timestamp()
         return datetime.fromtimestamp(float(item['expiration_timestamp'])) < datetime.fromtimestamp(current_timestamp)
     return False  # Default to not expired if expiration_timestamp is missing
 
 def format_expiration_date(item):
-    if 'expiration_timestamp' in item:
+    if 'expiration_timestamp' in item and item['expiration_timestamp']:
         return datetime.fromtimestamp(float(item['expiration_timestamp'])).strftime('%Y-%m-%d %H:%M:%S')
     return "No Expiration Date"  # Default display when expiration_timestamp is missing
 
