@@ -11,7 +11,18 @@ const apiKeyTableName = process.env.API_KEY_TABLE_NAME
 interface ApiKeyDetails {
   username?: string;
   api_key_name?: string;
+  expiration_timestamp?:string;
 }
+
+function is_expired(timestamp: string): boolean {
+  // Convert the timestamp string to a number in milliseconds
+  const timestampInMilliseconds = parseFloat(timestamp) * 1000;
+  // Get the current timestamp in milliseconds
+  const currentTimestamp = Date.now();
+  // Return true if the current timestamp is greater than the timestamp argument
+  return currentTimestamp > timestampInMilliseconds;
+}
+
 
 export const handler: APIGatewayRequestAuthorizerHandler = async (event, context) => {
   try {
@@ -39,6 +50,15 @@ export const handler: APIGatewayRequestAuthorizerHandler = async (event, context
       if (itemDetails) {
         console.log("Username:", itemDetails.username);
         console.log("API Key Name:", itemDetails.api_key_name);
+        if (itemDetails.expiration_timestamp) {
+          if(is_expired(itemDetails.expiration_timestamp)) {
+            console.log(`API key ${itemDetails.api_key_name} with timestamp: ${itemDetails.expiration_timestamp} is expired.`);
+            return denyAllPolicy();
+          } else {
+            console.log(`API key ${itemDetails.api_key_name} with timestamp: ${itemDetails.expiration_timestamp} is valid.`);
+          }
+        }
+
         return allowPolicy(event.methodArn, itemDetails.username);
       } else {
         console.log("No items found for the provided API key hash.");
@@ -98,6 +118,7 @@ async function queryByApiKeyHash(apiKeyHash: string): Promise<ApiKeyDetails | nu
           return {
               username: item.username?.S,
               api_key_name: item.api_key_name?.S,
+              expiration_timestamp: item?.expiration_timestamp?.S
           };
       }
       return null;
