@@ -335,7 +335,7 @@ with right_column:
 
     provider_map = {
         "Amazon Bedrock": "amazon",
-        "OpenAi": "openai",
+        "OpenAI": "openai",
         "Google": "google",
         "Anthropic": "anthropic",
         "Azure": "azure",
