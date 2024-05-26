@@ -13,6 +13,7 @@ from langchain_core.messages import AIMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_anthropic import ChatAnthropic
 from langchain_openai import AzureChatOpenAI
+import requests
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -27,8 +28,10 @@ DEFAULT_STOP_SEQUENCES = ["Human", "Question", "Customer", "Guru"]
 DEFAULT_TEMP = float(os.environ.get("DEFAULT_TEMP", 0.0))
 # Model selection.
 EMBEDDINGS_MODEL = os.environ.get("EMBEDDINGS_MODEL")
+COGNITO_DOMAIN_PREFIX = os.environ.get("COGNITO_DOMAIN_PREFIX")
 ## END ENVIORNMENT VARIABLES ###################################################
 ## BEGIN NETWORK ANALYSIS ######################################################
+REGION = os.environ.get("REGION")
 
 def now():
     return datetime.datetime.now()
@@ -192,8 +195,6 @@ class Settings:
         self.invalidate_cache = body.get("invalidate_cache", "false").lower() == "true"
 
 def get_ws_user_name(table, connection_id):
-    user_name = "guest"
-    return user_name
     try:
         item_response = table.get_item(Key={"connection_id": connection_id})
         print(f'item_response: {item_response}')
@@ -217,27 +218,30 @@ def get_connection_ids(table):
         return None
 
 
-def post_to_ws(string, table, connection_id, other_conn_id, apigw_management_client):
+def post_to_ws(string, table, connection_id, apigw_management_client):
     if DEBUG:  # Don't try send anything if we're debugging.
         return
 
     print("Posting string to websocket", string)
     try:
         send_response = apigw_management_client.post_to_connection(
-            Data=string.encode("utf-8"), ConnectionId=other_conn_id
+            Data=string.encode("utf-8"), ConnectionId=connection_id
         )
         print(
-            f"Posted message to connection {other_conn_id}, got websocket response {send_response}."
+            f"Posted message to connection {connection_id}, got websocket response {send_response}."
         )
     except ClientError:
-        print("Couldn't post to connection", other_conn_id)
+        print("Couldn't post to connection", connection_id)
     except apigw_management_client.exceptions.GoneException:
-        print(f"Connection {other_conn_id} is gone, removing.")
+        print(f"Connection {connection_id} is gone, removing.")
         try:
-            table.delete_item(Key={"connection_id": other_conn_id})
+            table.delete_item(Key={"connection_id": connection_id})
         except ClientError:
-            print("Couldn't remove connection", other_conn_id)
+            print("Couldn't remove connection", connection_id)
 
+#ToDo: Use username to look up whether user has exceeded thier ratelimit
+def has_exceeded_rate_limit(user_name):
+    return True
 
 def handle_message(event, table, connection_id, apigw_management_client):
     """
@@ -299,10 +303,23 @@ def handle_message(event, table, connection_id, apigw_management_client):
 
     # Set up the Websocket connection
     user_name = get_ws_user_name(table, connection_id)
-    connection_ids = get_connection_ids(table)
+    print(f'ws_user_name: {user_name}')
 
-    if (len(connection_ids) == 0) and not DEBUG:
-        return 404
+    if has_exceeded_rate_limit(user_name):
+        full_response_json = {
+            "completion": "Rate limit exceeded.",
+            "chat_id": settings.chat_id,
+            "cached": "false",
+            "has_more_messages": "false",
+        }
+        full_response_string = json.dumps(full_response_json)
+        post_to_ws(
+            full_response_string,
+            table,
+            connection_id,
+            apigw_management_client,
+        )
+        return 429
 
     # Get the chat history.
     chat_history = get_chat_history(settings.dynamodb_client, settings.chat_id)
@@ -337,15 +354,13 @@ def handle_message(event, table, connection_id, apigw_management_client):
         }
         full_response_string = json.dumps(full_response_json)
 
-        print("conn ids", connection_ids)
-        for other_conn_id in connection_ids:
-            post_to_ws(
-                full_response_string,
-                table,
-                connection_id,
-                other_conn_id,
-                apigw_management_client,
-            )
+        print("conn id", connection_id)
+        post_to_ws(
+            full_response_string,
+            table,
+            connection_id,
+            apigw_management_client,
+        )
     else:
         full_chat = append_prompt_to_history(
             settings.prompt, previous_requests, previous_responses, settings.model,
@@ -366,14 +381,12 @@ def handle_message(event, table, connection_id, apigw_management_client):
             }
             partial_response_string = json.dumps(partial_response_json)
 
-            for other_conn_id in connection_ids:
-                post_to_ws(
-                    partial_response_string,
-                    table,
-                    connection_id,
-                    other_conn_id,
-                    apigw_management_client,
-                )
+            post_to_ws(
+                partial_response_string,
+                table,
+                connection_id,
+                apigw_management_client,
+            )
 
         terminal_response_json = {
             "completion": "",
@@ -382,14 +395,12 @@ def handle_message(event, table, connection_id, apigw_management_client):
             "has_more_messages": "false",
         }
         terminal_response_string = json.dumps(terminal_response_json)
-        for other_conn_id in connection_ids:
-            post_to_ws(
-                terminal_response_string,
-                table,
-                connection_id,
-                other_conn_id,
-                apigw_management_client,
-            )
+        post_to_ws(
+            terminal_response_string,
+            table,
+            connection_id,
+            apigw_management_client,
+        )
 
         # If this is the first message recieved, we should cache the response.
         full_response_json = {
@@ -423,7 +434,38 @@ def handle_message(event, table, connection_id, apigw_management_client):
 ## BEGIN WEBSOCKETS ############################################################
 
 
-def handle_connect(user_name, table, connection_id):
+def get_user_info(authorization_header):
+    url = f'https://{COGNITO_DOMAIN_PREFIX}.auth.{REGION}.amazoncognito.com/oauth2/userInfo'
+
+    # Set the headers with the access token
+    headers = {
+        'Authorization': authorization_header
+    }
+
+    # Make the HTTP GET request to the User Info endpoint
+    response = requests.get(url, headers=headers)
+
+    # Check if the request was successful
+    if response.status_code == 200:
+        return response.json()  # Returns the user info as a JSON object
+    else:
+        return response.status_code, response.text  # Returns error status and message if not successful
+
+
+def handle_connect(event, table, connection_id):
+    headers = event["headers"]
+    print(f'headers: {headers}')
+    user_name = ""
+    if not headers or "Authorization" not in headers:
+        print(f"Can't find Authorization header")
+    else:
+        authorization_header = headers["Authorization"]
+        print(f"authorization_header: {authorization_header}")
+        user_info = get_user_info(authorization_header)
+        print(f'user_info: {user_info}')
+        user_name = user_info["preferred_username"]
+
+    print(f'username: {user_name}')
     """
     Handles new connections by adding the connection ID and user name to the
     DynamoDB table.
@@ -499,10 +541,7 @@ def lambda_handler(event, context):
 
     response = {"statusCode": 200}
     if route_key == "$connect":
-        user_name = event.get("queryStringParameters", {"name": "guest"}).get("name")
-        print(f'username: {user_name}')
-        print(f'username: {user_name}')
-        response["statusCode"] = handle_connect(user_name, table, connection_id)
+        response["statusCode"] = handle_connect(event, table, connection_id)
     elif route_key == "$disconnect":
         response["statusCode"] = handle_disconnect(table, connection_id)
     elif route_key == "sendmessage" or DEBUG:
