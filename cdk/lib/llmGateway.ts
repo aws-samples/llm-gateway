@@ -62,6 +62,7 @@ export class LlmGatewayStack extends cdk.Stack {
   azureOpenaiEndpoint = this.node.tryGetContext("azureOpenaiEndpoint");
   azureOpenaiApiKey = this.node.tryGetContext("azureOpenaiApiKey");
   azureOpenaiApiVersion = this.node.tryGetContext("azureOpenaiApiVersion");
+  apiKeyEcrRepoName = this.node.tryGetContext("apiKeyEcrRepoName");
 
   tryGetParameter(parameterName: string, defaultValue: any = null) {
     const parameter = this.node.tryFindChild(parameterName) as cdk.CfnParameter;
@@ -141,6 +142,41 @@ export class LlmGatewayStack extends cdk.Stack {
     return table;
   }
 
+  createSecureDdbTableWithSortKey(
+    tableName: string,
+    partitionKeyName: string,
+    sortKeyName: string,
+    secondaryIndexName: string,
+    secondaryIndexPartitionKeyName: string
+  ) {
+    const table = new dynamodb.Table(this, tableName, {
+      partitionKey: {
+        name: partitionKeyName,
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: sortKeyName,
+        type: dynamodb.AttributeType.STRING,
+      },
+      encryption: dynamodb.TableEncryption.AWS_MANAGED,
+      pointInTimeRecovery: true,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    // Adding a Global Secondary Index for the secondary index using provided parameters
+    table.addGlobalSecondaryIndex({
+      indexName: secondaryIndexName,
+      partitionKey: {
+        name: secondaryIndexPartitionKeyName,
+        type: dynamodb.AttributeType.STRING,
+      },
+      projectionType: dynamodb.ProjectionType.ALL, // Determines which attributes will be copied to the index
+    });
+
+    return table;
+  };
+
+
   createLlmGatewayLambdaRole(
     roleName: string,
     apiId: string,
@@ -198,6 +234,47 @@ export class LlmGatewayStack extends cdk.Stack {
         }),
       },
     });
+  }
+
+  createApiKeyLambdaRole(
+    roleName: string, 
+    apiKeyTable: dynamodb.Table,
+    apiKeyValueHashIndex: string
+  ) {
+    return new iam.Role(this, roleName, {
+      assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
+      roleName: roleName,
+      inlinePolicies: {
+        LambdaPermissions: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              sid: "ApiKeyDynamoDBAccess",
+              effect: iam.Effect.ALLOW,
+              actions: [
+                "dynamodb:BatchWriteItem",
+                "dynamodb:DeleteItem",
+                "dynamodb:GetItem",
+                "dynamodb:PutItem",
+                "dynamodb:Query",
+                "dynamodb:Scan",
+                "dynamodb:UpdateItem",
+              ],
+              resources: [apiKeyTable.tableArn, `${apiKeyTable.tableArn}/index/${apiKeyValueHashIndex}`],
+            }),
+            new iam.PolicyStatement({
+              sid: "WriteToCloudWatchLogs",
+              effect: iam.Effect.ALLOW,
+              actions: [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents",
+              ],
+              resources: ["*"],
+            }),
+          ]
+        })
+      }
+    })
   }
 
   configureVpcParams(): object {
@@ -369,6 +446,7 @@ export class LlmGatewayStack extends cdk.Stack {
 
   createWebsocketApi(
     bedrockEcr: ecr.IRepository,
+    apiKeyEcr: ecr.IRepository,
     chatHistoryTable: dynamodb.Table,
     costLambda: lambda.Function
   ) {
@@ -551,6 +629,15 @@ export class LlmGatewayStack extends cdk.Stack {
       enableTokenRevocation: true,
     });
 
+    const apiKeyValueHashIndex = "ApiKeyValueHashIndex"
+    const apiKeyTable = this.createSecureDdbTableWithSortKey(
+      "ApiKeyTable",
+      "username",
+      "api_key_id",
+      apiKeyValueHashIndex, 
+      "api_key_value_hash"
+      )
+
     const authHandler = new lambdaNode.NodejsFunction(this, "AuthHandlerFunction", {
       runtime: lambda.Runtime.NODEJS_20_X,
       entry: path.join(__dirname, "authorizers/websocket/index.ts"),
@@ -558,6 +645,7 @@ export class LlmGatewayStack extends cdk.Stack {
       environment: {
         USER_POOL_ID: userPool.userPoolId,
         APP_CLIENT_ID: applicationLoadBalanceruserPoolClient.userPoolClientId,
+        API_KEY_TABLE_NAME: apiKeyTable.tableName
       },
       bundling: {
         minify: false,
@@ -578,6 +666,20 @@ export class LlmGatewayStack extends cdk.Stack {
                 ],
                 resources: ["*"],
               }),
+              new iam.PolicyStatement({
+                sid: "ApiKeyDynamoDBAccess",
+                effect: iam.Effect.ALLOW,
+                actions: [
+                  "dynamodb:BatchWriteItem",
+                  "dynamodb:DeleteItem",
+                  "dynamodb:GetItem",
+                  "dynamodb:PutItem",
+                  "dynamodb:Query",
+                  "dynamodb:Scan",
+                  "dynamodb:UpdateItem",
+                ],
+                resources: [apiKeyTable.tableArn, `${apiKeyTable.tableArn}/index/${apiKeyValueHashIndex}`],
+              })
             ],
           }),
         },
@@ -591,6 +693,70 @@ export class LlmGatewayStack extends cdk.Stack {
         identitySource: ["route.request.header.Authorization"],
       },
     );
+
+    const apiKeyAuthorizerGet = new apigw.TokenAuthorizer(this,
+      "ApiKeyAuthorizerGet",
+      {
+        handler: authHandler,
+        identitySource: "method.request.header.Authorization",
+      },
+    )
+
+    const apiKeyAuthorizerPost = new apigw.TokenAuthorizer(this,
+      "ApiKeyAuthorizerPost",
+      {
+        handler: authHandler,
+        identitySource: "method.request.header.Authorization",
+      },
+    )
+
+    const apiKeyAuthorizerDelete = new apigw.TokenAuthorizer(this,
+      "ApiKeyAuthorizerDelete",
+      {
+        handler: authHandler,
+        identitySource: "method.request.header.Authorization",
+      },
+    )
+
+    const apiKeyapi = new apigw.RestApi(this, "LlmGatewayRest", {
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigw.Cors.ALL_ORIGINS,
+        allowMethods: apigw.Cors.ALL_METHODS,  // Make sure POST is included
+        allowHeaders: ['Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'],
+        allowCredentials: true,
+      },
+    });
+
+    const apiKeyHandler = new lambda.DockerImageFunction(this, 'apiKeyHandler', {
+      code: lambda.DockerImageCode.fromEcr(apiKeyEcr, { tag: "latest" }),
+      role: this.createApiKeyLambdaRole("apiKeyHandlerRole", apiKeyTable, apiKeyValueHashIndex),
+      architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
+      environment: {
+        API_KEY_TABLE_NAME: apiKeyTable.tableName,
+        COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix,
+        REGION: this.regionValue
+      },
+      timeout: cdk.Duration.minutes(15),
+      memorySize: 512,
+      ...vpcParams,
+    });
+
+    const apiKeyResource = apiKeyapi.root.addResource('apikey');
+
+    // Add GET endpoint
+    apiKeyResource.addMethod('GET', new apigw.LambdaIntegration(apiKeyHandler), {
+      authorizer: apiKeyAuthorizerGet
+    });
+
+    // Add POST endpoint
+    apiKeyResource.addMethod('POST', new apigw.LambdaIntegration(apiKeyHandler), {
+      authorizer: apiKeyAuthorizerPost
+    });
+
+    // Add DELETE endpoint
+    apiKeyResource.addMethod('DELETE', new apigw.LambdaIntegration(apiKeyHandler), {
+      authorizer: apiKeyAuthorizerDelete
+    });
 
     const vpc = new ec2.Vpc(this, 'MyVPC', { });
     const flowLog = new ec2.FlowLog(this, 'FlowLog', {
@@ -638,7 +804,8 @@ export class LlmGatewayStack extends cdk.Stack {
       image: ecs.ContainerImage.fromEcrRepository(ecrRepoStreamlit, "latest"),
       logging: ecs.LogDrivers.awsLogs({ logGroup, streamPrefix: 'streamlit' }),
       environment: { 
-        WebSocketURL: api.apiEndpoint
+        WebSocketURL: api.apiEndpoint,
+        ApiKeyURL: apiKeyapi.url
       },
       healthCheck: {
         command: ['CMD-SHELL', 'curl -f http://localhost:8501/healthz || exit 1'],
@@ -857,8 +1024,14 @@ export class LlmGatewayStack extends cdk.Stack {
         this.wsEcrRepoName!,
         this.wsEcrRepoName!
       );
+      const apiKeyEcrRepo = ecr.Repository.fromRepositoryName(
+        this,
+        this.apiKeyEcrRepoName!,
+        this.apiKeyEcrRepoName!
+      );
       const api = this.createWebsocketApi(
         ecrRepo,
+        apiKeyEcrRepo,
         chatHistoryTable,
         costLambda
       );

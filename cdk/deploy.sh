@@ -34,6 +34,12 @@ cd ../lambdas/ws
 #navigate back to the original directory
 cd -
 
+cd ../lambdas/api_key
+./build_and_deploy.sh $ECR_API_KEY_REPOSITORY
+
+#navigate back to the original directory
+cd -
+
 echo $UI_CERT_ARN
 echo $UI_DOMAIN_NAME
 echo $ECR_STREAMLIT_REPOSITORY
@@ -48,6 +54,7 @@ echo $ANTHROPIC_API_KEY
 echo $AZURE_OPENAI_ENDPOINT
 echo $AZURE_OPENAI_API_KEY
 echo $AZURE_OPENAI_API_VERSION
+echo $ECR_API_KEY_REPOSITORY
 cd ../streamlit
 ./build_and_deploy.sh $ECR_STREAMLIT_REPOSITORY
 
@@ -84,6 +91,7 @@ cdk deploy "$STACK_NAME" \
 --context azureOpenaiEndpoint=$AZURE_OPENAI_ENDPOINT \
 --context azureOpenaiApiKey=$AZURE_OPENAI_API_KEY \
 --context azureOpenaiApiVersion=$AZURE_OPENAI_API_VERSION \
+--context apiKeyEcrRepoName=$ECR_API_KEY_REPOSITORY \
 --outputs-file ./outputs.json
 
 # Check if the deployment was successful

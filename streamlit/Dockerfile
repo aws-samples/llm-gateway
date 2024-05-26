@@ -7,12 +7,16 @@ RUN mkdir -p /home/streamlit/.streamlit && chown -R streamlit:streamlit /home/st
 
 RUN mkdir /app && chown streamlit:streamlit /app
 RUN mkdir /app/data && chown streamlit:streamlit /app/data
+RUN mkdir /app/pages && chown streamlit:streamlit /app/pages
+
 COPY requirements.txt /app/
 WORKDIR /app
 RUN pip3 install --break-system-packages -r requirements.txt
 COPY app.py /app/
 COPY invoke_llm_with_streaming.py /app/
 COPY data/cost_db.csv /app/data/
+COPY apikey_create.py /app/pages/
+COPY apikey_get.py /app/pages/
 
 # Copy the Streamlit configuration file
 COPY config.toml /home/streamlit/.streamlit/
