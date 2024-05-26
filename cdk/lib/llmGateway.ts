@@ -433,7 +433,8 @@ export class LlmGatewayStack extends cdk.Stack {
           ANTHROPIC_API_KEY: this.anthropicApiKey,
           AZURE_OPENAI_ENDPOINT: this.azureOpenaiEndpoint,
           AZURE_OPENAI_API_KEY: this.azureOpenaiApiKey,
-          OPENAI_API_VERSION: this.azureOpenaiApiVersion
+          OPENAI_API_VERSION: this.azureOpenaiApiVersion,
+          COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix
         },
         timeout: cdk.Duration.minutes(15),
         memorySize: 512,
