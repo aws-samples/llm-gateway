@@ -2,6 +2,7 @@ import streamlit as st
 from streamlit.web.server.websocket_headers import _get_websocket_headers
 import requests
 import os
+from datetime import datetime, timedelta
 
 ApiKeyURL = os.environ["ApiKeyURL"] + "apikey"
 
@@ -14,6 +15,20 @@ def process_access_token():
     access_token = headers['X-Amzn-Oidc-Accesstoken']
     print(f'returning {access_token}')
     return access_token
+
+def get_current_timestamp():
+    return (datetime.now()).timestamp()
+
+def is_expired(item):
+    if 'expiration_timestamp' in item:
+        current_timestamp = get_current_timestamp()
+        return datetime.fromtimestamp(float(item['expiration_timestamp'])) < datetime.fromtimestamp(current_timestamp)
+    return False  # Default to not expired if expiration_timestamp is missing
+
+def format_expiration_date(item):
+    if 'expiration_timestamp' in item:
+        return datetime.fromtimestamp(float(item['expiration_timestamp'])).strftime('%Y-%m-%d %H:%M:%S')
+    return "No Expiration Date"  # Default display when expiration_timestamp is missing
 
 def fetch_api_keys():
     access_token = process_access_token()
@@ -50,10 +65,25 @@ if st.button("Refresh API Keys") or 'api_keys' not in st.session_state:
 
 # Display and manage API keys
 if st.session_state.api_keys:
-    for item in list(st.session_state.api_keys):  # Iterate over a copy to modify the list during iteration
-        col1, col2 = st.columns([4, 1])
+    # Define column headers outside the loop
+    col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+    col1.markdown("**Api Key Name**")
+    col2.markdown("**Status**")
+    col3.markdown("**Expiration Date**")
+    col4.markdown("**Action**")
+
+    for item in list(st.session_state.api_keys):
+        col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
         col1.write(f"{item['api_key_name']}")
-        if col2.button('Delete', key=item['api_key_name']):
+
+        expiration_status = "expired" if is_expired(item) else "valid"
+        expiration_date = format_expiration_date(item)
+
+        col2.write(expiration_status)
+        col3.write(expiration_date)
+
+        if col4.button('Delete', key=item['api_key_name']):
             delete_api_key(item)
+
 else:
     st.write("No API Keys to display.")

@@ -130,6 +130,7 @@ def lambda_handler(event, context):
             # Parse body to get username and api_key_name
             body = json.loads(event.get('body', '{}'))
             api_key_name = body.get('api_key_name')
+            expiration_timestamp = body.get('expiration_timestamp')
 
             if not api_key_name:
                 return {
@@ -145,7 +146,8 @@ def lambda_handler(event, context):
                 Item={
                     'username': username,
                     'api_key_name': api_key_name,
-                    'api_key_value_hash': hashed_api_key_value
+                    'api_key_value_hash': hashed_api_key_value,
+                    'expiration_timestamp': expiration_timestamp
                 },
                 ConditionExpression='attribute_not_exists(username) AND attribute_not_exists(api_key_name)'
             )
