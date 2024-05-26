@@ -32,7 +32,7 @@ with st.form(key='create_api_key_form'):
             if post_response.status_code == 200:
                 api_key_value = post_response.json().get("api_key_value", "")
                 st.success('API Key created successfully! This is your API key, copy it down as you will not be able to see it again:')
-                st.text_area("API Key", api_key_value, height=100)
+                st.code(api_key_value, language='plaintext')
             else:
                 response_json = post_response.json()
                 message = response_json.get("message")
