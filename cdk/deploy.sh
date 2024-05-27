@@ -5,6 +5,18 @@ STACK_NAME="LlmGatewayStack"
 AWS_REGION=$(aws configure get region)
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
 
+PYTHON_SCRIPT="generate_salt.py"
+
+# Check if the salt file exists
+if [ ! -f salt.txt ]; then
+    # Run the Python script to generate the salt file
+    python3 $PYTHON_SCRIPT
+fi
+
+# Read the salt from the file into a variable
+SALT=$(cat salt.txt)
+echo "Salt: $SALT"
+
 # Load environment variables from .env file
 while IFS='=' read -r key value
 do
@@ -92,6 +104,7 @@ cdk deploy "$STACK_NAME" \
 --context azureOpenaiApiKey=$AZURE_OPENAI_API_KEY \
 --context azureOpenaiApiVersion=$AZURE_OPENAI_API_VERSION \
 --context apiKeyEcrRepoName=$ECR_API_KEY_REPOSITORY \
+--context salt=$SALT \
 --outputs-file ./outputs.json
 
 # Check if the deployment was successful

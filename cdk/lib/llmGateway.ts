@@ -20,6 +20,8 @@ import * as lambdaNode from "aws-cdk-lib/aws-lambda-nodejs"
 import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2"
 import * as elbv2Actions from "aws-cdk-lib/aws-elasticloadbalancingv2-actions";
 import * as route53 from "aws-cdk-lib/aws-route53";
+import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+
 /* At present, this repository supports:
  *  "ai21.j2-mid-v1": {},
  *  "ai21.j2-ultra-v1": {},
@@ -63,6 +65,7 @@ export class LlmGatewayStack extends cdk.Stack {
   azureOpenaiApiKey = this.node.tryGetContext("azureOpenaiApiKey");
   azureOpenaiApiVersion = this.node.tryGetContext("azureOpenaiApiVersion");
   apiKeyEcrRepoName = this.node.tryGetContext("apiKeyEcrRepoName");
+  salt = this.node.tryGetContext("salt");
 
   tryGetParameter(parameterName: string, defaultValue: any = null) {
     const parameter = this.node.tryFindChild(parameterName) as cdk.CfnParameter;
@@ -182,7 +185,8 @@ export class LlmGatewayStack extends cdk.Stack {
     apiId: string,
     chatHistoryTable: dynamodb.Table,
     apiKeyTable: dynamodb.Table,
-    apiKeyValueHashIndex: string
+    apiKeyValueHashIndex: string,
+    secret: secretsmanager.Secret
   ) {
     const resourceArn = null;
     return new iam.Role(this, roleName, {
@@ -223,6 +227,14 @@ export class LlmGatewayStack extends cdk.Stack {
               resources: [chatHistoryTable.tableArn, apiKeyTable.tableArn, `${apiKeyTable.tableArn}/index/${apiKeyValueHashIndex}`],
             }),
             new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                "secretsmanager:GetSecretValue",
+                "secretsmanager:DescribeSecret"
+              ],
+              resources: [secret.secretArn]  // Restrict policy to this specific secret
+            }),
+            new iam.PolicyStatement({
               sid: "WriteToCloudWatchLogs",
               effect: iam.Effect.ALLOW,
               actions: [
@@ -241,7 +253,8 @@ export class LlmGatewayStack extends cdk.Stack {
   createApiKeyLambdaRole(
     roleName: string, 
     apiKeyTable: dynamodb.Table,
-    apiKeyValueHashIndex: string
+    apiKeyValueHashIndex: string,
+    secret: secretsmanager.Secret
   ) {
     return new iam.Role(this, roleName, {
       assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
@@ -262,6 +275,14 @@ export class LlmGatewayStack extends cdk.Stack {
                 "dynamodb:UpdateItem",
               ],
               resources: [apiKeyTable.tableArn, `${apiKeyTable.tableArn}/index/${apiKeyValueHashIndex}`],
+            }),
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                "secretsmanager:GetSecretValue",
+                "secretsmanager:DescribeSecret"
+              ],
+              resources: [secret.secretArn]  // Restrict policy to this specific secret
             }),
             new iam.PolicyStatement({
               sid: "WriteToCloudWatchLogs",
@@ -395,7 +416,14 @@ export class LlmGatewayStack extends cdk.Stack {
       chatHistoryTable,
       //ToDo: Fix this once we revisit the RestApi and bring it back to feature parity with the WebSocket API
       chatHistoryTable,
-      "stuff"
+      "stuff",
+      new secretsmanager.Secret(this, 'MySaltSecret', {
+        secretName: 'MySaltValue',
+        generateSecretString: {
+          secretStringTemplate: JSON.stringify({ salt: 'your-salt-value-here' }),
+          generateStringKey: 'dummyKey'  // Required by AWS but not used
+        }
+      })
     );
 
     // Create Lambda function from the ECR image.
@@ -455,6 +483,14 @@ export class LlmGatewayStack extends cdk.Stack {
     chatHistoryTable: dynamodb.Table,
     costLambda: lambda.Function
   ) {
+    const saltSecret = new secretsmanager.Secret(this, 'MySaltSecret', {
+      secretName: 'MySaltValue',
+      generateSecretString: {
+        secretStringTemplate: JSON.stringify({ salt: this.salt }),
+        generateStringKey: 'dummyKey'  // Required by AWS but not used since we provide the complete template
+      }
+    });
+
     const api = new apigwv2.WebSocketApi(this, "LlmGatewayWebsocket");
 
     if (this.useApiKey) {
@@ -502,7 +538,8 @@ export class LlmGatewayStack extends cdk.Stack {
       api.apiId,
       chatHistoryTable,
       apiKeyTable,
-      apiKeyValueHashIndex
+      apiKeyValueHashIndex,
+      saltSecret
     );
 
     // Create Lambda function from the ECR image
@@ -530,7 +567,8 @@ export class LlmGatewayStack extends cdk.Stack {
           AZURE_OPENAI_API_KEY: this.azureOpenaiApiKey,
           OPENAI_API_VERSION: this.azureOpenaiApiVersion,
           COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix,
-          API_KEY_TABLE_NAME: apiKeyTable.tableName
+          API_KEY_TABLE_NAME: apiKeyTable.tableName,
+          SALT_SECRET: saltSecret.secretName
         },
         timeout: cdk.Duration.minutes(15),
         memorySize: 512,
@@ -654,7 +692,8 @@ export class LlmGatewayStack extends cdk.Stack {
       environment: {
         USER_POOL_ID: userPool.userPoolId,
         APP_CLIENT_ID: applicationLoadBalanceruserPoolClient.userPoolClientId,
-        API_KEY_TABLE_NAME: apiKeyTable.tableName
+        API_KEY_TABLE_NAME: apiKeyTable.tableName,
+        SALT_SECRET: saltSecret.secretName
       },
       bundling: {
         minify: false,
@@ -688,7 +727,15 @@ export class LlmGatewayStack extends cdk.Stack {
                   "dynamodb:UpdateItem",
                 ],
                 resources: [apiKeyTable.tableArn, `${apiKeyTable.tableArn}/index/${apiKeyValueHashIndex}`],
-              })
+              }),
+              new iam.PolicyStatement({
+                effect: iam.Effect.ALLOW,
+                actions: [
+                  "secretsmanager:GetSecretValue",
+                  "secretsmanager:DescribeSecret"
+                ],
+                resources: [saltSecret.secretArn]  // Restrict policy to this specific secret
+              }),
             ],
           }),
         },
@@ -738,12 +785,13 @@ export class LlmGatewayStack extends cdk.Stack {
 
     const apiKeyHandler = new lambda.DockerImageFunction(this, 'apiKeyHandler', {
       code: lambda.DockerImageCode.fromEcr(apiKeyEcr, { tag: "latest" }),
-      role: this.createApiKeyLambdaRole("apiKeyHandlerRole", apiKeyTable, apiKeyValueHashIndex),
+      role: this.createApiKeyLambdaRole("apiKeyHandlerRole", apiKeyTable, apiKeyValueHashIndex, saltSecret),
       architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
       environment: {
         API_KEY_TABLE_NAME: apiKeyTable.tableName,
         COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix,
-        REGION: this.regionValue
+        REGION: this.regionValue,
+        SALT_SECRET: saltSecret.secretName
       },
       timeout: cdk.Duration.minutes(15),
       memorySize: 512,

@@ -19,6 +19,28 @@ API_KEY_TABLE_NAME = os.environ.get("API_KEY_TABLE_NAME", None)
 COGNITO_DOMAIN_PREFIX = os.environ.get("COGNITO_DOMAIN_PREFIX")
 
 REGION = os.environ.get("REGION")
+SALT_SECRET = os.environ.get("SALT_SECRET")
+
+secrets_manager_client = boto3.client("secretsmanager")
+
+
+def get_salt():
+    try:
+        get_secret_value_response = secrets_manager_client.get_secret_value(
+            SecretId=SALT_SECRET
+        )
+    except Exception as e:
+        print(f"Unable to retrieve secret: {e}")
+        return None
+
+    # Decode the JSON string and return
+    if 'SecretString' in get_secret_value_response:
+        secret = get_secret_value_response['SecretString']
+        secret_json = json.loads(secret)
+        return secret_json['salt']
+
+SALT = get_salt()
+print(f'SALT: {SALT}')
 
 def now():
     return datetime.datetime.now()
@@ -26,7 +48,6 @@ def now():
 class Settings:
     def __init__(self, event, session):
         self.dynamodb_client = boto3.client("dynamodb")
-
         # Get config from the request body.
         body = json.loads(event["body"])
         self.prompt = body["prompt"]
@@ -74,12 +95,19 @@ def generate_api_key(key_size=32):
 
 def hash_api_key(api_key_value):
     """
-    Generates a SHA-256 hash of the API key value.
+    Generates a SHA-256 hash of the API key value, a salt.
+    
+    Args:
+    api_key_value (str): The API key to hash.
+    
+    Returns:
+    str: The hex digest of the hash.
     """
     hasher = hashlib.sha256()
-    hasher.update(api_key_value.encode('utf-8'))  # Ensure the input is encoded to bytes
+    # Combine the salt and the API key value.
+    salted_input = SALT + api_key_value
+    hasher.update(salted_input.encode('utf-8'))  # Ensure the input is encoded to bytes
     return hasher.hexdigest()
-
 
 def lambda_handler(event, context):
     """

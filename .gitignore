@@ -12,3 +12,4 @@ venv/
 cdk/outputs.json
 cdk/resources.txt
 scripts/resources.txt
+cdk/salt.txt

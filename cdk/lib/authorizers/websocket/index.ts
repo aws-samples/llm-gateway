@@ -1,12 +1,38 @@
 import { APIGatewayRequestAuthorizerEvent, APIGatewayRequestAuthorizerHandler } from "aws-lambda";
 import { CognitoJwtVerifier } from "aws-jwt-verify";
 import { DynamoDBClient, QueryCommand } from "@aws-sdk/client-dynamodb";
+import { SecretsManager } from "@aws-sdk/client-secrets-manager";
 import { createHash } from 'crypto';
 
 const UserPoolId = process.env.USER_POOL_ID!;
 const AppClientId = process.env.APP_CLIENT_ID!;
 const awsRegion = process.env.AWS_REGION;
 const apiKeyTableName = process.env.API_KEY_TABLE_NAME
+const saltSecret = process.env.SALT_SECRET;
+
+const secretsManagerClient = new SecretsManager({
+  region: awsRegion  // specify your region
+});
+
+async function getSalt(): Promise<string> {
+  try {
+    const data = await secretsManagerClient.getSecretValue({
+      SecretId: saltSecret
+    });
+
+    if (data.SecretString) {
+      const secret = JSON.parse(data.SecretString);
+      console.log(`Salt: ${secret.salt}`);
+      return secret.salt;
+    }
+  } catch (e) {
+    console.error(`Unable to retrieve secret: ${e}`);
+    return "";
+  }
+  console.error(`Unable to retrieve secret:`);
+  return "";
+}
+
 
 interface ApiKeyDetails {
   username?: string;
@@ -44,7 +70,8 @@ export const handler: APIGatewayRequestAuthorizerHandler = async (event, context
     console.log(error.message);
     console.log("Event:", event);
     const apiKeyValue = getEncodedTokenOrApiKey(event);
-    const apiKeyHash = hashApiKey(apiKeyValue)
+    const salt = await getSalt();
+    const apiKeyHash = hashApiKey(apiKeyValue, salt)
     const itemDetails = await queryByApiKeyHash(apiKeyHash)
     try {
       if (itemDetails) {
@@ -71,12 +98,12 @@ export const handler: APIGatewayRequestAuthorizerHandler = async (event, context
   }
 };
 
-function hashApiKey(apiKeyValue: string): string {
+function hashApiKey(apiKeyValue: string, salt: string): string {
   const hasher = createHash('sha256');
-  hasher.update(apiKeyValue, 'utf-8'); // Ensure the input is treated as UTF-8 encoded string
+  const saltedInput = salt + apiKeyValue;
+  hasher.update(saltedInput, 'utf-8'); // Ensure the input is treated as UTF-8 encoded string
   return hasher.digest('hex'); // Return the hash as a hexadecimal string
 }
-
 
 function getEncodedTokenOrApiKey(event: any) {
   // Ensure headers exist and get the token from the Authorization header
