@@ -59,5 +59,9 @@ NagSuppressions.addStackSuppressions(stack, [
   {
     id: "AwsSolutions-APIG2",
     reason: "Validation done in lambdas."
+  },
+  {
+    id:"AwsSolutions-SMG4",
+    reason: "This error is about a salt. No plans to rotate the salt currently."
   }
 ]);
