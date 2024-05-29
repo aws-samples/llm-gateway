@@ -23,8 +23,8 @@ region = boto3.Session().region_name
 bedrock = boto3.client('bedrock-runtime', region, endpoint_url=f'https://bedrock-runtime.{region}.amazonaws.com',
                        config=config)
 
-WebSocketURL = os.environ["WebSocketURL"]
-print(f'WebSocketURL: {WebSocketURL}')
+ApiUrl = os.environ["ApiUrl"]
+print(f'ApiUrl: {ApiUrl}')
 
 class ThreadSafeSessionState:
     def __init__(self):
@@ -58,7 +58,7 @@ async def llm_answer_streaming(question, provider, model, access_token):
     }
     
     print(f'websocket headers: {headers}')
-    async with websockets.connect(f'{WebSocketURL}/prod', extra_headers=headers) as websocket:
+    async with websockets.connect(f'{ApiUrl}/prod', extra_headers=headers) as websocket:
         print(f"message: {message}")
         await websocket.send(json.dumps(message))
         while True:

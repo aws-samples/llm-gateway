@@ -40,8 +40,10 @@ esac
 
 echo $ARCH
 
-cd ../lambdas/ws
-./build_and_deploy.sh $ECR_WEBSOCKET_REPOSITORY
+echo $ECR_LLM_GATEWAY_REPOSITORY
+echo $API_GATEWAY_TYPE
+cd ../lambdas/gateway
+./build_and_deploy.sh $ECR_LLM_GATEWAY_REPOSITORY $API_GATEWAY_TYPE
 
 #navigate back to the original directory
 cd -
@@ -67,6 +69,7 @@ echo $AZURE_OPENAI_ENDPOINT
 echo $AZURE_OPENAI_API_KEY
 echo $AZURE_OPENAI_API_VERSION
 echo $ECR_API_KEY_REPOSITORY
+echo $ECR_LLM_GATEWAY_REPOSITORY
 cd ../streamlit
 ./build_and_deploy.sh $ECR_STREAMLIT_REPOSITORY
 
@@ -88,7 +91,6 @@ cdk deploy "$STACK_NAME" \
 --context useIamAuth=$API_GATEWAY_USE_IAM_AUTH \
 --context maxTokens=$DEFAULT_MAX_TOKENS \
 --context defaultTemp=$DEFAULT_TEMP \
---context ecrWebsocketRepository=$ECR_WEBSOCKET_REPOSITORY \
 --context ecrStreamlitRepository=$ECR_STREAMLIT_REPOSITORY \
 --context uiCertArn=$UI_CERT_ARN \
 --context uiDomainName=$UI_DOMAIN_NAME \
@@ -104,6 +106,7 @@ cdk deploy "$STACK_NAME" \
 --context azureOpenaiApiKey=$AZURE_OPENAI_API_KEY \
 --context azureOpenaiApiVersion=$AZURE_OPENAI_API_VERSION \
 --context apiKeyEcrRepoName=$ECR_API_KEY_REPOSITORY \
+--context llmGatewayRepoName=$ECR_LLM_GATEWAY_REPOSITORY \
 --context salt=$SALT \
 --outputs-file ./outputs.json
 
@@ -115,21 +118,21 @@ if [ $? -eq 0 ]; then
     USER_POOL_ID=$(jq -r ".\"${STACK_NAME}\".UserPoolId" ./outputs.json)
     USER_POOL_CLIENT_ID=$(jq -r ".\"${STACK_NAME}\".UserPoolClientId" ./outputs.json)
     WEBSOCKET_URL=$(jq -r ".\"${STACK_NAME}\".WebSocketUrl" ./outputs.json)
-    WEBSOCKET_LAMBDA_FUNCTION_NAME=$(jq -r ".\"${STACK_NAME}\".WebSocketLambdaFunctionName" ./outputs.json)
     API_KEY_LAMBDA_FUNCTION_NAME=$(jq -r ".\"${STACK_NAME}\".ApiKeyLambdaFunctionName" ./outputs.json)
+    LLM_GATEWAY_LAMBDA_FUNCTION=$(jq -r ".\"${STACK_NAME}\".LlmgatewayLambdaFunctionName" ./outputs.json)
 
     # Write outputs to a file with modified keys and format
     echo "UserPoolID=$USER_POOL_ID" > resources.txt
     echo "UserPoolClientID=$USER_POOL_CLIENT_ID" >> resources.txt
     echo "WebSocketURL=$WEBSOCKET_URL" >> resources.txt
-    echo "WebSocketLambdaFunctionName=$WEBSOCKET_LAMBDA_FUNCTION_NAME" >> resources.txt
     echo "ApiKeyLambdaFunctionName=$API_KEY_LAMBDA_FUNCTION_NAME" >> resources.txt
+    echo "LlmgatewayLambdaFunctionName=$LLM_GATEWAY_LAMBDA_FUNCTION" >> resources.txt
 
     echo "Outputs have been written to resources.txt"
 
     aws lambda update-function-code \
-        --function-name $WEBSOCKET_LAMBDA_FUNCTION_NAME \
-        --image-uri $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_WEBSOCKET_REPOSITORY:latest \
+        --function-name $LLM_GATEWAY_LAMBDA_FUNCTION \
+        --image-uri $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_LLM_GATEWAY_REPOSITORY:latest \
         --region $AWS_REGION
     
     aws lambda update-function-code \

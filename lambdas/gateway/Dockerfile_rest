@@ -7,8 +7,9 @@ ENV HOME /tmp
 
 RUN chmod o+rx /root  # TODO: Can we delete this?
 
-COPY app.py ${LAMBDA_TASK_ROOT}
+COPY app_rest.py ${LAMBDA_TASK_ROOT}
+COPY common.py ${LAMBDA_TASK_ROOT}
 
 WORKDIR /root
 
-CMD ["app.lambda_handler"]
+CMD ["app_rest.lambda_handler"]
