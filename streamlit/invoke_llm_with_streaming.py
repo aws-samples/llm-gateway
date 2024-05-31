@@ -18,8 +18,6 @@ load_dotenv()
 
 ApiUrl = os.environ["ApiUrl"]
 print(f'ApiUrl: {ApiUrl}')
-#api_key=bedrock is needed for some weird legacy server-side behavior from another repo. Will remove.
-client = openai.AsyncOpenAI(base_url=ApiUrl, api_key="bedrock")
 
 class ThreadSafeSessionState:
     def __init__(self):
@@ -40,6 +38,8 @@ class ThreadSafeSessionState:
 thread_safe_session_state = ThreadSafeSessionState()
 
 async def llm_answer_streaming(question, model, access_token):
+    client = openai.AsyncOpenAI(base_url=ApiUrl, api_key=access_token)
+
     if thread_safe_session_state.get("chat_id"):
         chat_id = thread_safe_session_state.get("chat_id")
         # ToDo: Restore chat_id functionality to support server side history
@@ -48,11 +48,6 @@ async def llm_answer_streaming(question, model, access_token):
     else:
         print(f'did not find chat id in context')
 
-    #ToDo: Restore auth logic for llmGateway API. Fine for now because the api is private
-    headers = {
-        "Authorization": f"Bearer {access_token}"
-    }
-    
     stream = await client.chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": question}],
