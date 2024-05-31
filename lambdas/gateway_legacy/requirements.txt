@@ -1,0 +1,13 @@
+boto3==1.28.58
+pytest==7.2.1
+websockets==10.4
+langchain==0.2.1
+langchain-community==0.2.1
+langchain-openai==0.1.7
+openai==1.30.3
+langchain-google-genai==1.0.5
+pillow==10.3.0
+langchain-core==0.2.1
+langchain-anthropic==0.1.13
+langchain-openai==0.1.7
+requests==2.32.2

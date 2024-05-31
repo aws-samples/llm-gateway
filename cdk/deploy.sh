@@ -41,9 +41,8 @@ esac
 echo $ARCH
 
 echo $ECR_LLM_GATEWAY_REPOSITORY
-echo $API_GATEWAY_TYPE
 cd ../lambdas/gateway
-./build_and_deploy.sh $ECR_LLM_GATEWAY_REPOSITORY $API_GATEWAY_TYPE
+./build_and_deploy.sh $ECR_LLM_GATEWAY_REPOSITORY
 
 #navigate back to the original directory
 cd -
@@ -70,13 +69,14 @@ echo $AZURE_OPENAI_API_KEY
 echo $AZURE_OPENAI_API_VERSION
 echo $ECR_API_KEY_REPOSITORY
 echo $ECR_LLM_GATEWAY_REPOSITORY
+echo $LLM_GATEWAY_IS_PUBLIC
 cd ../streamlit
 ./build_and_deploy.sh $ECR_STREAMLIT_REPOSITORY
 
 #navigate back to the original directory
 cd -
 
-cd lib/authorizers/websocket
+cd lib/authorizer
 npm install
 
 #navigate back to the original directory
@@ -86,7 +86,6 @@ cd -
 echo "Deploying the CDK stack..."
 cdk deploy "$STACK_NAME" \
 --context architecture=$ARCH \
---context apiGatewayType=$API_GATEWAY_TYPE \
 --context useApiKey=$API_GATEWAY_USE_API_KEY \
 --context useIamAuth=$API_GATEWAY_USE_IAM_AUTH \
 --context maxTokens=$DEFAULT_MAX_TOKENS \
@@ -107,6 +106,9 @@ cdk deploy "$STACK_NAME" \
 --context azureOpenaiApiVersion=$AZURE_OPENAI_API_VERSION \
 --context apiKeyEcrRepoName=$ECR_API_KEY_REPOSITORY \
 --context llmGatewayRepoName=$ECR_LLM_GATEWAY_REPOSITORY \
+--context llmGatewayCertArn=$LLM_GATEWAY_CERT_ARN \
+--context llmGatewayDomainName=$LLM_GATEWAY_DOMAIN_NAME \
+--context llmGatewayIsPublic=$LLM_GATEWAY_IS_PUBLIC \
 --context salt=$SALT \
 --outputs-file ./outputs.json
 
@@ -117,14 +119,12 @@ if [ $? -eq 0 ]; then
     # Extract outputs using the stack name variable
     USER_POOL_ID=$(jq -r ".\"${STACK_NAME}\".UserPoolId" ./outputs.json)
     USER_POOL_CLIENT_ID=$(jq -r ".\"${STACK_NAME}\".UserPoolClientId" ./outputs.json)
-    WEBSOCKET_URL=$(jq -r ".\"${STACK_NAME}\".WebSocketUrl" ./outputs.json)
     API_KEY_LAMBDA_FUNCTION_NAME=$(jq -r ".\"${STACK_NAME}\".ApiKeyLambdaFunctionName" ./outputs.json)
     LLM_GATEWAY_LAMBDA_FUNCTION=$(jq -r ".\"${STACK_NAME}\".LlmgatewayLambdaFunctionName" ./outputs.json)
 
     # Write outputs to a file with modified keys and format
     echo "UserPoolID=$USER_POOL_ID" > resources.txt
     echo "UserPoolClientID=$USER_POOL_CLIENT_ID" >> resources.txt
-    echo "WebSocketURL=$WEBSOCKET_URL" >> resources.txt
     echo "ApiKeyLambdaFunctionName=$API_KEY_LAMBDA_FUNCTION_NAME" >> resources.txt
     echo "LlmgatewayLambdaFunctionName=$LLM_GATEWAY_LAMBDA_FUNCTION" >> resources.txt
 

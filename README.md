@@ -86,7 +86,6 @@ The chatbot in this demo helps mobile network technicians summarize information 
 1. `cd` into `cdk`
 2. Run `cp template.env .env`
 3. Set `COGNTIO_DOMAIN_PREFIX` to a globally unique alphanumeric string
-4. In your new `.env` file, make sure `API_GATEWAY_TYPE` is set to `"websocket"`.
 5. Set the `UI_CERT_ARN` to the ARN of the certificate you created in the `Creating your certificate` section of this ReadMe.
 6. Set the `UI_DOMAIN_NAME` to the sub domain you created in the `Creating your certificate` section of this ReadMe.
 7. If you want to use OpenAI LLMs, make sure to populate `API_KEY` with your OpenAI api key
@@ -104,7 +103,6 @@ The following are settings which you can configure as needed for your project, a
 This information can also be found inside `<project_root>/cdk/template.env`.
 
 ```
-API_GATEWAY_TYPE="websocket"          # "rest" or "websocket"
 API_GATEWAY_USE_API_KEY="true"   # "true" or "false"
 API_GATEWAY_USE_IAM_AUTH="true"  # "true" or "false"
 DEFAULT_MAX_TOKENS="4096"
