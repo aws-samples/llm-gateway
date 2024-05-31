@@ -42,7 +42,7 @@ echo $ARCH
 
 echo $ECR_LLM_GATEWAY_REPOSITORY
 cd ../lambdas/gateway
-./build_and_deploy.sh $ECR_LLM_GATEWAY_REPOSITORY
+./build_and_deploy.sh $ECR_LLM_GATEWAY_REPOSITORY $SERVERLESS_API
 
 #navigate back to the original directory
 cd -
@@ -70,6 +70,7 @@ echo $AZURE_OPENAI_API_VERSION
 echo $ECR_API_KEY_REPOSITORY
 echo $ECR_LLM_GATEWAY_REPOSITORY
 echo $LLM_GATEWAY_IS_PUBLIC
+echo $SERVERLESS_API
 cd ../streamlit
 ./build_and_deploy.sh $ECR_STREAMLIT_REPOSITORY
 
@@ -109,6 +110,7 @@ cdk deploy "$STACK_NAME" \
 --context llmGatewayCertArn=$LLM_GATEWAY_CERT_ARN \
 --context llmGatewayDomainName=$LLM_GATEWAY_DOMAIN_NAME \
 --context llmGatewayIsPublic=$LLM_GATEWAY_IS_PUBLIC \
+--context serverlessApi=$SERVERLESS_API \
 --context salt=$SALT \
 --outputs-file ./outputs.json
 
@@ -121,20 +123,25 @@ if [ $? -eq 0 ]; then
     USER_POOL_CLIENT_ID=$(jq -r ".\"${STACK_NAME}\".UserPoolClientId" ./outputs.json)
     API_KEY_LAMBDA_FUNCTION_NAME=$(jq -r ".\"${STACK_NAME}\".ApiKeyLambdaFunctionName" ./outputs.json)
     LLM_GATEWAY_LAMBDA_FUNCTION=$(jq -r ".\"${STACK_NAME}\".LlmgatewayLambdaFunctionName" ./outputs.json)
+    LLM_GATEWAY_ECS_TASK=$(jq -r ".\"${STACK_NAME}\".LlmgatewayEcsTask" ./outputs.json)
 
     # Write outputs to a file with modified keys and format
     echo "UserPoolID=$USER_POOL_ID" > resources.txt
     echo "UserPoolClientID=$USER_POOL_CLIENT_ID" >> resources.txt
     echo "ApiKeyLambdaFunctionName=$API_KEY_LAMBDA_FUNCTION_NAME" >> resources.txt
     echo "LlmgatewayLambdaFunctionName=$LLM_GATEWAY_LAMBDA_FUNCTION" >> resources.txt
+    echo "LlmgatewayEcsTask=$LLM_GATEWAY_ECS_TASK" >> resources.txt
 
     echo "Outputs have been written to resources.txt"
 
-    aws lambda update-function-code \
-        --function-name $LLM_GATEWAY_LAMBDA_FUNCTION \
-        --image-uri $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_LLM_GATEWAY_REPOSITORY:latest \
-        --region $AWS_REGION
-    
+    # Check if $LLM_GATEWAY_LAMBDA_FUNCTION has a value
+    if [ -n "$LLM_GATEWAY_LAMBDA_FUNCTION" ] && [ "$LLM_GATEWAY_LAMBDA_FUNCTION" != "null" ]; then
+        aws lambda update-function-code \
+            --function-name $LLM_GATEWAY_LAMBDA_FUNCTION \
+            --image-uri $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_LLM_GATEWAY_REPOSITORY:latest \
+            --region $AWS_REGION
+    fi
+
     aws lambda update-function-code \
         --function-name $API_KEY_LAMBDA_FUNCTION_NAME \
         --image-uri $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_API_KEY_REPOSITORY:latest \
@@ -145,6 +152,14 @@ if [ $? -eq 0 ]; then
         --service LlmGatewayUI \
         --force-new-deployment \
         --desired-count 1
+
+    if [ -n "$LLM_GATEWAY_ECS_TASK" ] && [ "$LLM_GATEWAY_ECS_TASK" != "null" ]; then
+        aws ecs update-service \
+            --cluster $LLM_GATEWAY_ECS_TASK \
+            --service $LLM_GATEWAY_ECS_TASK \
+            --force-new-deployment \
+            --desired-count 1
+    fi
 else
     echo "Deployment failed"
 fi

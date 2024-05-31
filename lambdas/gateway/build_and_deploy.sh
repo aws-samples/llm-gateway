@@ -1,11 +1,18 @@
 #!/bin/bash
 
-if [ $# -ne 1 ]; then
-  echo "Usage: $0 <APP_NAME>"
+if [ $# -ne 2 ]; then
+  echo "Usage: $0 <APP_NAME> <SERVERLESS_API>"
   exit 1
 fi
 
 APP_NAME=$1
+SERVERLESS_API=$2
+# Convert SERVERLESS_API to lowercase using tr and check if it is "true"
+if [ "$(echo "$SERVERLESS_API" | tr '[:upper:]' '[:lower:]')" = "true" ]; then
+  DOCKERFILE=Dockerfile
+else
+  DOCKERFILE=Dockerfile_ecs
+fi
 
 AWS_REGION=$(aws configure get region)
 export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
@@ -37,6 +44,6 @@ esac
 echo $ARCH
 
 aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
-docker build --platform $ARCH -t $APP_NAME .
+docker build --platform $ARCH -f $DOCKERFILE -t $APP_NAME .
 docker tag $APP_NAME\:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$APP_NAME\:latest
 docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$APP_NAME\:latest

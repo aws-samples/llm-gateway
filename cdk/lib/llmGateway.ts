@@ -70,6 +70,7 @@ export class LlmGatewayStack extends cdk.Stack {
   llmGatewayCertArn = String(this.node.tryGetContext("llmGatewayCertArn"));
   llmGatewayDomainName = String(this.node.tryGetContext("llmGatewayDomainName"));
   llmGatewayIsPublic = String(this.node.tryGetContext("llmGatewayIsPublic")).toLowerCase() == "true";
+  serverlessApi = String(this.node.tryGetContext("serverlessApi")).toLowerCase() == "true";
 
   apiKeyValueHashIndex = "ApiKeyValueHashIndex"
   apiKeyTableName = "ApiKeyTable"
@@ -195,16 +196,17 @@ export class LlmGatewayStack extends cdk.Stack {
     return table;
   };
 
-  createLlmGatewayLambdaRole(
+  createLlmGatewayRole(
     roleName: string,
     chatHistoryTable: dynamodb.Table,
     apiKeyTable: dynamodb.Table,
     apiKeyValueHashIndex: string,
-    secret: secretsmanager.Secret
+    secret: secretsmanager.Secret,
+    assumedBy: iam.ServicePrincipal
   ) {
     const resourceArn = null;
     return new iam.Role(this, roleName, {
-      assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
+      assumedBy: assumedBy,
       roleName: roleName,
       inlinePolicies: {
         LambdaPermissions: new iam.PolicyDocument({
@@ -327,7 +329,7 @@ export class LlmGatewayStack extends cdk.Stack {
   createAlbApi(
     chatHistoryTable: dynamodb.Table,
     apiKeyEcr: ecr.IRepository,
-    albApiEcr: ecr.IRepository
+    llmGatewayApiEcr: ecr.IRepository
   ) {
     const saltSecret = this.createSaltSecret()
 
@@ -339,51 +341,38 @@ export class LlmGatewayStack extends cdk.Stack {
       this.apiKeyTableIndexPartitionKey
     )
 
-    const lambdaRole = this.createLlmGatewayLambdaRole(
-      "AlbLambdaRole",
-      chatHistoryTable,
-      apiKeyTable,
-      this.apiKeyValueHashIndex,
-      saltSecret
-    )
+    
 
     this.setUpCognito()
-
-    // Create Lambda function from the ECR image.
-    const vpcParams = this.configureVpcParams();
-    const fn = new lambda.DockerImageFunction(this, "AlbLambda", {
-      code: lambda.DockerImageCode.fromEcr(albApiEcr, { tag: "latest" }),
-      role: lambdaRole,
-      architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
-      environment: {
-        CHAT_HISTORY_TABLE_NAME: chatHistoryTable.tableName,
-        DEFAULT_TEMP: this.defaultTemp,
-        DEFAULT_MAX_TOKENS: this.defaultMaxTokens,
-        REGION: this.regionValue,
-        OPENAI_API_KEY: this.openaiApiKey,
-        GOOGLE_API_KEY: this.googleApiKey,
-        ANTHROPIC_API_KEY: this.anthropicApiKey,
-        AZURE_OPENAI_ENDPOINT: this.azureOpenaiEndpoint,
-        AZURE_OPENAI_API_KEY: this.azureOpenaiApiKey,
-        OPENAI_API_VERSION: this.azureOpenaiApiVersion,
-        COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix,
-        API_KEY_TABLE_NAME: apiKeyTable.tableName,
-        SALT_SECRET: saltSecret.secretName,
-        USER_POOL_ID: this.userPool.userPoolId,
-        APP_CLIENT_ID: this.applicationLoadBalanceruserPoolClient.userPoolClientId,
-      },
-      timeout: cdk.Duration.minutes(15),
-      memorySize: 512,
-      ...vpcParams,
-    });
-
-    const apiKeyApi = this.createApiKeyHandlerApi(apiKeyTable, saltSecret, vpcParams, apiKeyEcr)
 
     const vpc = new ec2.Vpc(this, 'MyVPC', { });
     const flowLog = new ec2.FlowLog(this, 'FlowLog', {
       resourceType: ec2.FlowLogResourceType.fromVpc(vpc),
       trafficType: ec2.FlowLogTrafficType.ALL,
     });
+
+
+    // Create Lambda function from the ECR image.
+    const vpcParams = this.configureVpcParams();
+    let targetGroup :elbv2.ApplicationTargetGroup;
+
+    const environment = {
+      CHAT_HISTORY_TABLE_NAME: chatHistoryTable.tableName,
+      DEFAULT_TEMP: this.defaultTemp,
+      DEFAULT_MAX_TOKENS: this.defaultMaxTokens,
+      REGION: this.regionValue,
+      OPENAI_API_KEY: this.openaiApiKey,
+      GOOGLE_API_KEY: this.googleApiKey,
+      ANTHROPIC_API_KEY: this.anthropicApiKey,
+      AZURE_OPENAI_ENDPOINT: this.azureOpenaiEndpoint,
+      AZURE_OPENAI_API_KEY: this.azureOpenaiApiKey,
+      OPENAI_API_VERSION: this.azureOpenaiApiVersion,
+      COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix,
+      API_KEY_TABLE_NAME: apiKeyTable.tableName,
+      SALT_SECRET: saltSecret.secretName,
+      USER_POOL_ID: this.userPool.userPoolId,
+      APP_CLIENT_ID: this.applicationLoadBalanceruserPoolClient.userPoolClientId,
+    }
 
     // Create a Security Group for the private ALB that only allows traffic from within the VPC
     const llmGatewayAlbSecurityGroup = new ec2.SecurityGroup(this, 'LlmGatewayAlbSecurityGroup', {
@@ -397,18 +386,127 @@ export class LlmGatewayStack extends cdk.Stack {
       llmGatewayAlbSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443));
     }
 
+    if (this.serverlessApi) {
+      const lambdaRole = this.createLlmGatewayRole(
+        "llmGatewayLambdaRole",
+        chatHistoryTable,
+        apiKeyTable,
+        this.apiKeyValueHashIndex,
+        saltSecret,
+        new iam.ServicePrincipal("lambda.amazonaws.com")
+      )
+      const fn = new lambda.DockerImageFunction(this, "llmGatewayLambda", {
+        code: lambda.DockerImageCode.fromEcr(llmGatewayApiEcr, { tag: "latest" }),
+        role: lambdaRole,
+        architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
+        environment: environment,
+        timeout: cdk.Duration.minutes(15),
+        memorySize: 512,
+        ...vpcParams,
+      });
+
+      //Create a target group for the Lambda function
+      targetGroup = new elbv2.ApplicationTargetGroup(this, 'LambdaTargetGroup', {
+        vpc,
+        targetType: elbv2.TargetType.LAMBDA,
+        targets: [new targets.LambdaTarget(fn)],
+      });
+
+      new cdk.CfnOutput(this, 'LlmgatewayLambdaFunctionName', {
+        value: fn.functionName,
+        description: 'Name of the llmgateway alb lambda function'
+      });
+    }
+    else {
+      const llmGatewayEcsTask = "LlmGatewayApi"
+
+      const cluster = new ecs.Cluster(this, 'llmGatewayCluster', {
+        vpc,
+        clusterName: llmGatewayEcsTask,
+        containerInsights:true,
+      });
+
+      const logGroup = new logs.LogGroup(this, 'llmGatewayLogGroup', {
+        logGroupName: '/ecs/LlmGateway/Api',
+        removalPolicy: cdk.RemovalPolicy.DESTROY
+      });
+
+      const ecsExecutionRole = this.createLlmGatewayRole(
+        "llmGatewayEcsRole",
+        chatHistoryTable,
+        apiKeyTable,
+        this.apiKeyValueHashIndex,
+        saltSecret,
+        new iam.ServicePrincipal('ecs-tasks.amazonaws.com')
+      )
+      ecsExecutionRole.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonECSTaskExecutionRolePolicy'));
+
+      const taskDefinition = new ecs.FargateTaskDefinition(this, 'llmGatewayTaskDefinition', {
+        memoryLimitMiB: 2048,
+        cpu: 1024,
+        executionRole: ecsExecutionRole,
+        taskRole: ecsExecutionRole,
+        runtimePlatform: {
+          cpuArchitecture: this.architecture == "x86" ? ecs.CpuArchitecture.X86_64 : ecs.CpuArchitecture.ARM64,
+          operatingSystemFamily: ecs.OperatingSystemFamily.LINUX
+        },
+        
+      });
+
+      const container = taskDefinition.addContainer('llmGateway', {
+        image: ecs.ContainerImage.fromEcrRepository(llmGatewayApiEcr, "latest"),
+        logging: ecs.LogDrivers.awsLogs({ logGroup, streamPrefix: 'llmGatewayApi' }),
+        environment: environment,
+      });
+
+      container.addPortMappings({
+        containerPort: 80,
+        hostPort: 80,
+        protocol: ecs.Protocol.TCP
+      });
+
+      const service = new ecs.FargateService(this, 'LlmGatewayApiService', {
+        serviceName: llmGatewayEcsTask,
+        cluster,
+        taskDefinition,
+        desiredCount: 1,
+        securityGroups: [llmGatewayAlbSecurityGroup],
+        assignPublicIp: false,
+        circuitBreaker: {
+          enable:true,
+          rollback:true
+        },
+        healthCheckGracePeriod: cdk.Duration.seconds(60),
+
+      });
+
+      //Create a target group for the ECS task
+      targetGroup = new elbv2.ApplicationTargetGroup(this, 'llmGatewayEcsTargetGroup', {
+        vpc,
+        targetGroupName: 'llmGatewayEcsTargetGroup',
+        protocol: elbv2.ApplicationProtocol.HTTP,
+        targetType: elbv2.TargetType.IP,
+        port: 80,
+        targets: [service],
+        healthCheck: {
+          enabled: true,
+          path: "/health"
+        }
+      });
+
+      new cdk.CfnOutput(this, 'LlmgatewayEcsTask', {
+        value: llmGatewayEcsTask,
+        description: 'Name of the llmgateway ecs task'
+      });
+    }
+
+    const apiKeyApi = this.createApiKeyHandlerApi(apiKeyTable, saltSecret, vpcParams, apiKeyEcr)
+
     const llmGatewayAlb = new elbv2.ApplicationLoadBalancer(this, 'LlmGatewayAlb', {
       vpc,
       internetFacing: this.llmGatewayIsPublic, // Not internet-facing
       securityGroup: llmGatewayAlbSecurityGroup,
       loadBalancerName: 'LlmGatewayAlb',
-    });
-
-    //Create a target group for the Lambda function
-    const lambdaTargetGroup = new elbv2.ApplicationTargetGroup(this, 'LambdaTargetGroup', {
-      vpc,
-      targetType: elbv2.TargetType.LAMBDA,
-      targets: [new targets.LambdaTarget(fn)],
     });
 
     const llmGatewayAppListener = llmGatewayAlb.addListener('LlmGatewayAppListener', {
@@ -424,7 +522,7 @@ export class LlmGatewayStack extends cdk.Stack {
     llmGatewayAppListener.addAction('ForwardToLambdaAction', {
       priority: 10,
       conditions: [elbv2.ListenerCondition.pathPatterns(["/", "/*"])],
-      action: elbv2.ListenerAction.forward([lambdaTargetGroup])
+      action: elbv2.ListenerAction.forward([targetGroup])
     });
 
     const llmGatewayAppListener80 = llmGatewayAlb.addListener('LlmGatewayAppListener80', {
@@ -467,11 +565,6 @@ export class LlmGatewayStack extends cdk.Stack {
 
     //Replace api.apiEndpoint with the url of the application load balancer
     this.setUpStreamlit(vpc, LlmGatewayUrl, apiKeyApi)
-
-    new cdk.CfnOutput(this, 'LlmgatewayLambdaFunctionName', {
-      value: fn.functionName,
-      description: 'Name of the llmgateway alb lambda function'
-    });
   }
 
   createSaltSecret() : secretsmanager.Secret {
