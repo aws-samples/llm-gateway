@@ -326,6 +326,21 @@ export class LlmGatewayStack extends cdk.Stack {
     return {};
   }
 
+  createEcsTargetGroup(vpc: ec2.Vpc, service: ecs.FargateService, type: string) : elbv2.ApplicationTargetGroup {
+    return new elbv2.ApplicationTargetGroup(this, 'llmGatewayEcsTargetGroup' + type, {
+      vpc,
+      targetGroupName: 'llmGatewayEcsTargetGroup' + type,
+      protocol: elbv2.ApplicationProtocol.HTTP,
+      targetType: elbv2.TargetType.IP,
+      port: 80,
+      targets: [service],
+      healthCheck: {
+        enabled: true,
+        path: "/health"
+      }
+    });
+  }
+
   createAlbApi(
     chatHistoryTable: dynamodb.Table,
     apiKeyEcr: ecr.IRepository,
@@ -481,18 +496,7 @@ export class LlmGatewayStack extends cdk.Stack {
       });
 
       //Create a target group for the ECS task
-      targetGroup = new elbv2.ApplicationTargetGroup(this, 'llmGatewayEcsTargetGroup', {
-        vpc,
-        targetGroupName: 'llmGatewayEcsTargetGroup',
-        protocol: elbv2.ApplicationProtocol.HTTP,
-        targetType: elbv2.TargetType.IP,
-        port: 80,
-        targets: [service],
-        healthCheck: {
-          enabled: true,
-          path: "/health"
-        }
-      });
+      targetGroup = this.createEcsTargetGroup(vpc, service, this.llmGatewayIsPublic ? "Public" : "Private")
 
       new cdk.CfnOutput(this, 'LlmgatewayEcsTask', {
         value: llmGatewayEcsTask,
@@ -502,12 +506,23 @@ export class LlmGatewayStack extends cdk.Stack {
 
     const apiKeyApi = this.createApiKeyHandlerApi(apiKeyTable, saltSecret, vpcParams, apiKeyEcr)
 
-    const llmGatewayAlb = new elbv2.ApplicationLoadBalancer(this, 'LlmGatewayAlb', {
-      vpc,
-      internetFacing: this.llmGatewayIsPublic, // Not internet-facing
-      securityGroup: llmGatewayAlbSecurityGroup,
-      loadBalancerName: 'LlmGatewayAlb',
-    });
+    let llmGatewayAlb : elbv2.ApplicationLoadBalancer;
+    if (this.llmGatewayIsPublic) {
+      llmGatewayAlb = new elbv2.ApplicationLoadBalancer(this, 'PublicLlmGatewayAlb', {
+        vpc,
+        internetFacing: true, // Not internet-facing
+        securityGroup: llmGatewayAlbSecurityGroup,
+        loadBalancerName: 'PublicLlmGatewayAlb',
+      });
+    }
+    else {
+      llmGatewayAlb = new elbv2.ApplicationLoadBalancer(this, 'PrivateLlmGatewayAlb', {
+        vpc,
+        internetFacing: false, // Not internet-facing
+        securityGroup: llmGatewayAlbSecurityGroup,
+        loadBalancerName: 'PrivateLlmGatewayAlb',
+      });
+    }
 
     const llmGatewayAppListener = llmGatewayAlb.addListener('LlmGatewayAppListener', {
       port: 443,
