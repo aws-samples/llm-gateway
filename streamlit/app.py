@@ -276,7 +276,6 @@ with main_column:
                     args=(
                         llm_answer_streaming(
                             st.session_state.prompt,
-                            st.session_state.provider_id,
                             st.session_state.model_id,
                             access_token
                         ),
@@ -305,13 +304,12 @@ with main_column:
 
 
 with right_column:
-    # Control items
-    is_streaming = st.toggle("Stream responses?")
 
     st.header("Usage Statistics")
     # Your usage statistics functionality goes here
 
-    provider_options = ["Amazon Bedrock", "OpenAI", "Google", "Anthropic", "Azure"]
+    #ToDo: ReAdd support for other models with OpenAI interface
+    provider_options = ["Amazon Bedrock"]#, "OpenAI", "Google", "Anthropic", "Azure"]
 
     #Need clear_chat_id for switching models to work correctly
     selected_provider = st.session_state.provider_selection = st.selectbox("Provider", provider_options, on_change=clear_chat_id)

@@ -5,3 +5,4 @@ python-dotenv==1.0.1
 pyjwt==2.8.0
 streamlit-float==0.3.4
 requests==2.32.2
+openai==1.30.5

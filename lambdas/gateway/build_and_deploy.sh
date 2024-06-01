@@ -1,25 +1,18 @@
 #!/bin/bash
 
 if [ $# -ne 2 ]; then
-  echo "Usage: $0 <APP_NAME> <APP_TYPE>"
+  echo "Usage: $0 <APP_NAME> <SERVERLESS_API>"
   exit 1
 fi
 
 APP_NAME=$1
-APP_TYPE=$2
-
-if [ "$APP_TYPE" = "rest" ]; then
-    DOCKERFILE=Dockerfile_rest
-elif [ "$APP_TYPE" = "websocket" ]; then
-    DOCKERFILE=Dockerfile_websocket
+SERVERLESS_API=$2
+# Convert SERVERLESS_API to lowercase using tr and check if it is "true"
+if [ "$(echo "$SERVERLESS_API" | tr '[:upper:]' '[:lower:]')" = "true" ]; then
+  DOCKERFILE=Dockerfile
 else
-    echo "Invalid APP_TYPE specified: $APP_TYPE"
-    echo "Please specify 'rest' or 'websocket'."
-    exit 1
+  DOCKERFILE=Dockerfile_ecs
 fi
-
-# Output the set Dockerfile for verification
-echo "DOCKERFILE set to $DOCKERFILE"
 
 AWS_REGION=$(aws configure get region)
 export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)

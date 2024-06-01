@@ -10,18 +10,11 @@ from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 from botocore.session import Session
 from urllib.parse import urlparse, urlunparse
+import openai
 
 # loading in environment variables
 load_dotenv()
 
-# configuring our CLI profile name
-boto3.setup_default_session(profile_name=os.getenv('profile_name'))
-# increasing the timeout period when invoking bedrock
-config = botocore.config.Config(connect_timeout=120, read_timeout=120)
-# instantiating the bedrock client
-region = boto3.Session().region_name
-bedrock = boto3.client('bedrock-runtime', region, endpoint_url=f'https://bedrock-runtime.{region}.amazonaws.com',
-                       config=config)
 
 ApiUrl = os.environ["ApiUrl"]
 print(f'ApiUrl: {ApiUrl}')
@@ -44,31 +37,30 @@ class ThreadSafeSessionState:
 
 thread_safe_session_state = ThreadSafeSessionState()
 
-async def llm_answer_streaming(question, provider, model, access_token):
-    message = {"action": "sendmessage", "prompt": question, "provider": provider, "model": model}
+async def llm_answer_streaming(question, model, access_token):
+    client = openai.AsyncOpenAI(base_url=ApiUrl, api_key=access_token)
 
     if thread_safe_session_state.get("chat_id"):
-        print(f'found chat id in context')
-        message["chat_id"] = thread_safe_session_state.get("chat_id")
+        chat_id = thread_safe_session_state.get("chat_id")
+        # ToDo: Restore chat_id functionality to support server side history
+        #message["chat_id"] = thread_safe_session_state.get("chat_id")
+        print(f'found chat id {chat_id} in context')
     else:
         print(f'did not find chat id in context')
 
-    headers = {
-        "Authorization": f"Bearer {access_token}"
-    }
-    
-    print(f'websocket headers: {headers}')
-    async with websockets.connect(f'{ApiUrl}/prod', extra_headers=headers) as websocket:
-        print(f"message: {message}")
-        await websocket.send(json.dumps(message))
-        while True:
-            response = await websocket.recv()
-            response_json = json.loads(response)
-            print(f'response_json: {response_json}')
-            completion = response_json.get("completion")
-            print(f'Assigning chat id: {response_json.get("chat_id")}')
-            thread_safe_session_state.set("chat_id", response_json.get("chat_id"))
-            if completion:
-                yield completion
-            if response_json.get("has_more_messages") == "false":
-                break
+    stream = await client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": question}],
+        max_tokens=1000,
+        temperature=1,
+        n=1,
+        stream=True
+    )
+    # ToDo: Restore chat_id functionality to support server side history
+    # print(f'Assigning chat id: {response_json.get("chat_id")}')
+    # thread_safe_session_state.set("chat_id", response_json.get("chat_id"))
+    async for chunk in stream:
+        try:
+            yield chunk.choices[0].delta.content if chunk.choices[0].finish_reason != "stop" else ''
+        except:
+            yield 'error!'
