@@ -159,7 +159,9 @@ def get_current_time_period(frequency):
                 )
 
 def get_user_quota_config(user_name):
-    return get_user_document(user_name, "quota_config")
+    quota_config_document = get_user_document(user_name, "quota_config")
+    if quota_config_document:
+        return quota_config_document.get('quota_map', None)
 
 def get_user_requests_summary(user_name):
     return get_user_document(user_name, "requests_summary")
