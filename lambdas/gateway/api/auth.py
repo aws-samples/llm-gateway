@@ -26,6 +26,7 @@ def api_key_auth(
     try:
         user_name = get_user_name(credentials.credentials)
         print(f'Found user_name {user_name}. Access granted.')
+        return user_name
     except Exception as e:
         print(f'Error when trying to authenticate: {e}')
         raise HTTPException(

@@ -71,6 +71,8 @@ echo $ECR_API_KEY_REPOSITORY
 echo $ECR_LLM_GATEWAY_REPOSITORY
 echo $LLM_GATEWAY_IS_PUBLIC
 echo $SERVERLESS_API
+echo $DEFAULT_QUOTA_FREQUENCY
+echo $DEFAULT_QUOTA_DOLLARS
 cd ../streamlit
 ./build_and_deploy.sh $ECR_STREAMLIT_REPOSITORY
 
@@ -111,6 +113,8 @@ cdk deploy "$STACK_NAME" \
 --context llmGatewayDomainName=$LLM_GATEWAY_DOMAIN_NAME \
 --context llmGatewayIsPublic=$LLM_GATEWAY_IS_PUBLIC \
 --context serverlessApi=$SERVERLESS_API \
+--context defaultQuotaFrequency=$DEFAULT_QUOTA_FREQUENCY \
+--context defaultQuotaDollars=$DEFAULT_QUOTA_DOLLARS \
 --context salt=$SALT \
 --outputs-file ./outputs.json
 

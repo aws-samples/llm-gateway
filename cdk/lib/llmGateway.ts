@@ -22,6 +22,7 @@ import * as elbv2Actions from "aws-cdk-lib/aws-elasticloadbalancingv2-actions";
 import * as route53 from "aws-cdk-lib/aws-route53";
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as targets from 'aws-cdk-lib/aws-elasticloadbalancingv2-targets';
+import * as ssm from "aws-cdk-lib/aws-ssm";
 
 /* At present, this repository supports:
  *  "ai21.j2-mid-v1": {},
@@ -71,6 +72,8 @@ export class LlmGatewayStack extends cdk.Stack {
   llmGatewayDomainName = String(this.node.tryGetContext("llmGatewayDomainName"));
   llmGatewayIsPublic = String(this.node.tryGetContext("llmGatewayIsPublic")).toLowerCase() == "true";
   serverlessApi = String(this.node.tryGetContext("serverlessApi")).toLowerCase() == "true";
+  defaultQuotaFrequency = String(this.node.tryGetContext("defaultQuotaFrequency"));
+  defaultQuotaDollars = String(this.node.tryGetContext("defaultQuotaDollars"));
 
   apiKeyValueHashIndex = "ApiKeyValueHashIndex"
   apiKeyTableName = "ApiKeyTable"
@@ -78,6 +81,9 @@ export class LlmGatewayStack extends cdk.Stack {
   apiKeyTableSortKey = "api_key_name"
   apiKeyTableIndexPartitionKey = "api_key_value_hash"
   apiKeyHandlerFunctionName = "apiKeyHandlerFunction";
+  quotaTableName = "QuotaTable"
+  quotaTablePartitionKey = "username_document_type"
+  quotaTableSortKey = "id"
 
   userPool: cognito.IUserPool;
   applicationLoadBalanceruserPoolClient: cognito.IUserPoolClient;
@@ -166,8 +172,8 @@ export class LlmGatewayStack extends cdk.Stack {
     tableName: string,
     partitionKeyName: string,
     sortKeyName: string,
-    secondaryIndexName: string,
-    secondaryIndexPartitionKeyName: string
+    secondaryIndexName: string | null,
+    secondaryIndexPartitionKeyName: string | null
   ) {
     const table = new dynamodb.Table(this, tableName, {
       partitionKey: {
@@ -183,15 +189,17 @@ export class LlmGatewayStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    // Adding a Global Secondary Index for the secondary index using provided parameters
-    table.addGlobalSecondaryIndex({
-      indexName: secondaryIndexName,
-      partitionKey: {
-        name: secondaryIndexPartitionKeyName,
-        type: dynamodb.AttributeType.STRING,
-      },
-      projectionType: dynamodb.ProjectionType.ALL, // Determines which attributes will be copied to the index
-    });
+    if (secondaryIndexName && secondaryIndexPartitionKeyName) {
+      // Adding a Global Secondary Index for the secondary index using provided parameters
+      table.addGlobalSecondaryIndex({
+        indexName: secondaryIndexName,
+        partitionKey: {
+          name: secondaryIndexPartitionKeyName,
+          type: dynamodb.AttributeType.STRING,
+        },
+        projectionType: dynamodb.ProjectionType.ALL, // Determines which attributes will be copied to the index
+      });
+    }
 
     return table;
   };
@@ -199,9 +207,11 @@ export class LlmGatewayStack extends cdk.Stack {
   createLlmGatewayRole(
     roleName: string,
     chatHistoryTable: dynamodb.Table,
+    quotaTable: dynamodb.Table,
     apiKeyTable: dynamodb.Table,
     apiKeyValueHashIndex: string,
     secret: secretsmanager.Secret,
+    defaultQuotaParameter: ssm.StringParameter,
     assumedBy: iam.ServicePrincipal
   ) {
     const resourceArn = null;
@@ -232,7 +242,7 @@ export class LlmGatewayStack extends cdk.Stack {
                 "dynamodb:Scan",
                 "dynamodb:UpdateItem",
               ],
-              resources: [chatHistoryTable.tableArn, apiKeyTable.tableArn, `${apiKeyTable.tableArn}/index/${apiKeyValueHashIndex}`],
+              resources: [chatHistoryTable.tableArn, apiKeyTable.tableArn, `${apiKeyTable.tableArn}/index/${apiKeyValueHashIndex}`, quotaTable.tableArn],
             }),
             new iam.PolicyStatement({
               effect: iam.Effect.ALLOW,
@@ -252,6 +262,11 @@ export class LlmGatewayStack extends cdk.Stack {
               ],
               resources: ["*"],
             }),
+            new iam.PolicyStatement({
+              actions: ['ssm:GetParameter'],
+              resources: [defaultQuotaParameter.parameterArn],
+              effect: iam.Effect.ALLOW
+            })
           ],
         }),
       },
@@ -346,6 +361,28 @@ export class LlmGatewayStack extends cdk.Stack {
     apiKeyEcr: ecr.IRepository,
     llmGatewayApiEcr: ecr.IRepository
   ) {
+    let parameterValue: { [key: string]: string } = {};
+    parameterValue[this.defaultQuotaFrequency] = this.defaultQuotaDollars;
+
+    // Serialize the map to a JSON string
+    const parameterValueString = JSON.stringify(parameterValue);
+
+    // Store the serialized map in SSM Parameter Store
+    const defaultQuotaParameter = new ssm.StringParameter(this, 'MyParameter', {
+      parameterName: 'defaultQuota',
+      stringValue: parameterValueString,
+      description: 'This parameter stores the default quota for users',
+      tier: ssm.ParameterTier.STANDARD
+    });
+
+    const quotaTable = this.createSecureDdbTableWithSortKey(
+      this.quotaTableName,
+      this.quotaTablePartitionKey,
+      this.quotaTableSortKey,
+      null,
+      null
+    )
+
     const saltSecret = this.createSaltSecret()
 
     const apiKeyTable = this.createSecureDdbTableWithSortKey(
@@ -355,8 +392,6 @@ export class LlmGatewayStack extends cdk.Stack {
       this.apiKeyValueHashIndex, 
       this.apiKeyTableIndexPartitionKey
     )
-
-    
 
     this.setUpCognito()
 
@@ -387,6 +422,8 @@ export class LlmGatewayStack extends cdk.Stack {
       SALT_SECRET: saltSecret.secretName,
       USER_POOL_ID: this.userPool.userPoolId,
       APP_CLIENT_ID: this.applicationLoadBalanceruserPoolClient.userPoolClientId,
+      QUOTA_TABLE_NAME: quotaTable.tableName,
+      DEFAULT_QUOTA_PARAMETER_NAME: defaultQuotaParameter.parameterName
     }
 
     // Create a Security Group for the private ALB that only allows traffic from within the VPC
@@ -405,9 +442,11 @@ export class LlmGatewayStack extends cdk.Stack {
       const lambdaRole = this.createLlmGatewayRole(
         "llmGatewayLambdaRole",
         chatHistoryTable,
+        quotaTable,
         apiKeyTable,
         this.apiKeyValueHashIndex,
         saltSecret,
+        defaultQuotaParameter,
         new iam.ServicePrincipal("lambda.amazonaws.com")
       )
       const fn = new lambda.DockerImageFunction(this, "llmGatewayLambda", {
@@ -449,9 +488,11 @@ export class LlmGatewayStack extends cdk.Stack {
       const ecsExecutionRole = this.createLlmGatewayRole(
         "llmGatewayEcsRole",
         chatHistoryTable,
+        quotaTable,
         apiKeyTable,
         this.apiKeyValueHashIndex,
         saltSecret,
+        defaultQuotaParameter,
         new iam.ServicePrincipal('ecs-tasks.amazonaws.com')
       )
       ecsExecutionRole.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonECSTaskExecutionRolePolicy'));

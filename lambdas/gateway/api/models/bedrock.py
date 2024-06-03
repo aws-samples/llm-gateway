@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from typing import AsyncIterable, Iterable, Literal
 
 import boto3
+from api.quota import calculate_input_cost, calculate_output_cost, update_quota
 import numpy as np
 import requests
 import tiktoken
@@ -106,7 +107,7 @@ class BedrockModel(BaseChatModel, ABC):
         message_id = self.generate_message_id()
         return self.parse_response(chat_request, response, message_id)
 
-    def chat_stream(self, chat_request: ChatRequest) -> AsyncIterable[bytes]:
+    def chat_stream(self, chat_request: ChatRequest, user_name) -> AsyncIterable[bytes]:
         """Default implementation for Chat Stream API"""
         if DEBUG:
             logger.info("Raw request: " + chat_request.model_dump_json())
@@ -123,17 +124,26 @@ class BedrockModel(BaseChatModel, ABC):
         ):
             if stream_response.choices:
                 yield self.stream_response_to_bytes(stream_response)
-            elif (
-                    chat_request.stream_options
-                    and chat_request.stream_options.include_usage
-            ):
+            else:
+                
+                usage = stream_response.usage
+                print(f'stream_response.usage: {usage}')
+                input_cost = calculate_input_cost(usage.prompt_tokens, chat_request.model)
+                print(f'usage.prompt_tokens: {usage.prompt_tokens} input_cost: {input_cost}')
+                output_cost = calculate_output_cost(usage.completion_tokens, chat_request.model)
+                print(f'usage.completion_tokens: {usage.completion_tokens} input_cost: {output_cost}')
+                total_cost = input_cost + output_cost
+                print(f'total_cost: {total_cost}')
+                update_quota(user_name, total_cost)
+
                 # An empty choices for Usage as per OpenAI doc below:
                 # if you set stream_options: {"include_usage": true}.
                 # an additional chunk will be streamed before the data: [DONE] message.
                 # The usage field on this chunk shows the token usage statistics for the entire request,
                 # and the choices field will always be an empty array.
                 # All other chunks will also include a usage field, but with a null value.
-                yield self.stream_response_to_bytes(stream_response)
+                if chat_request.stream_options and chat_request.stream_options.include_usage:
+                    yield self.stream_response_to_bytes(stream_response)
         # return an [DONE] message at the end.
         yield self.stream_response_to_bytes()
 
