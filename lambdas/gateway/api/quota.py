@@ -89,8 +89,8 @@ def build_new_requests_summary(user_name, quota_config):
                 "total_estimate_cost": decimal.Decimal(str(0.00))
             }
         requests_summary = {
-            "username_document_type": user_name + ":requests_summary",
-            "id": user_name,
+            "username": user_name,
+            "document_type_id": f"requests_summary:{user_name}",
             "quota_limit_map": quota_limit_map,
             'last_updated_time': get_current_timestamp()
         }
@@ -102,7 +102,7 @@ def create_requests_summary(requests_summary):
     try:
         response = quota_table.put_item(
             Item=requests_summary,
-            ConditionExpression='attribute_not_exists(username_document_type) AND attribute_not_exists(id)'
+            ConditionExpression='attribute_not_exists(username) AND attribute_not_exists(document_type_id)'
         )
         print("Item created successfully:", response)
     except ClientError as e:
@@ -166,13 +166,12 @@ def get_user_quota_config(user_name):
 def get_user_requests_summary(user_name):
     return get_user_document(user_name, "requests_summary")
 
-def get_user_document(user_name, document_type):
-    username_document_type = user_name + f":{document_type}"
-    id = user_name
-    print(f'username_document_type: {username_document_type} id: {id}')
+def get_user_document(user_name, document_type):    
+    document_type_id = f'{document_type}:{user_name}'
+    print(f'username: {user_name} document_type_id: {document_type_id}')
 
     response = quota_table.query(
-        KeyConditionExpression=Key('username_document_type').eq(username_document_type) & Key('id').eq(id)
+        KeyConditionExpression=Key('username').eq(user_name) & Key('document_type_id').eq(document_type_id)
     )
     print(f'response: {response}')
     print(f'response: {response["Items"]}')
@@ -214,8 +213,8 @@ def calculate_cost(num_tokens, model, cost_type):
 
 def update_quota(user_name, total_cost):
     keys = {
-        'username_document_type': user_name + ":requests_summary",  # Partition Key
-        'id': user_name    # Sort Key
+        'username': user_name,  # Partition Key
+        'document_type_id': f'requests_summary:{user_name}'    # Sort Key
     }
 
     try:

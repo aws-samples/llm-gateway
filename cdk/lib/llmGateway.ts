@@ -83,8 +83,8 @@ export class LlmGatewayStack extends cdk.Stack {
   apiKeyTableIndexPartitionKey = "api_key_value_hash";
   apiKeyHandlerFunctionName = "apiKeyHandlerFunction";
   quotaTableName = "QuotaTable";
-  quotaTablePartitionKey = "username_document_type";
-  quotaTableSortKey = "id";
+  quotaTablePartitionKey = "username";
+  quotaTableSortKey = "document_type_id";
   quotaHandlerFunctionName = "quotaHandlerFunciton";
 
   userPool: cognito.IUserPool;
@@ -328,6 +328,7 @@ export class LlmGatewayStack extends cdk.Stack {
   createQuotaLambdaRole(
     roleName: string, 
     quotaTable: dynamodb.ITable,
+    defaultQuotaParameter:ssm.StringParameter
   ) {
     return new iam.Role(this, roleName, {
       assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
@@ -359,6 +360,11 @@ export class LlmGatewayStack extends cdk.Stack {
               ],
               resources: ["*"],
             }),
+            new iam.PolicyStatement({
+              actions: ['ssm:GetParameter'],
+              resources: [defaultQuotaParameter.parameterArn],
+              effect: iam.Effect.ALLOW
+            })
           ]
         })
       }
@@ -589,7 +595,7 @@ export class LlmGatewayStack extends cdk.Stack {
     }
 
     const apiKeyApi = this.createApiKeyHandlerApi(apiKeyTable, saltSecret, vpcParams, apiKeyEcr)
-    const quotaApi = this.createQuotaHandlerApi(quotaTable, vpcParams, quotaEcr)
+    const quotaApi = this.createQuotaHandlerApi(quotaTable, vpcParams, quotaEcr, defaultQuotaParameter)
 
     let llmGatewayAlb : elbv2.ApplicationLoadBalancer;
     if (this.llmGatewayIsPublic) {
@@ -676,7 +682,7 @@ export class LlmGatewayStack extends cdk.Stack {
     });
   }
 
-  createQuotaHandlerApi(quotaTable: dynamodb.ITable, vpcParams: object, quotaHandlerEcr: ecr.IRepository) {
+  createQuotaHandlerApi(quotaTable: dynamodb.ITable, vpcParams: object, quotaHandlerEcr: ecr.IRepository, defaultQuotaParameter:ssm.StringParameter) {
     const authHandler = new lambdaNode.NodejsFunction(this, "AuthHandlerFunctionQuota", {
       runtime: lambda.Runtime.NODEJS_20_X,
       entry: path.join(__dirname, "authorizer/index.ts"),
@@ -718,6 +724,14 @@ export class LlmGatewayStack extends cdk.Stack {
       },
     )
 
+    const quotaAuthorizerGetSummary = new apigw.TokenAuthorizer(this,
+      "QuotaAuthorizerGetSummary",
+      {
+        handler: authHandler,
+        identitySource: "method.request.header.Authorization",
+      },
+    )
+
     const quotaAuthorizerPost = new apigw.TokenAuthorizer(this,
       "QuotaAuthorizerPost",
       {
@@ -746,11 +760,12 @@ export class LlmGatewayStack extends cdk.Stack {
     const quotaHandler = new lambda.DockerImageFunction(this, 'quotaHandler', {
       functionName: this.quotaHandlerFunctionName,
       code: lambda.DockerImageCode.fromEcr(quotaHandlerEcr, { tag: "latest" }),
-      role: this.createQuotaLambdaRole("quotaHandlerRole", quotaTable),
+      role: this.createQuotaLambdaRole("quotaHandlerRole", quotaTable, defaultQuotaParameter),
       architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
       environment: {
         REGION: this.regionValue,
-        QUOTA_TABLE_NAME: quotaTable.tableName
+        QUOTA_TABLE_NAME: quotaTable.tableName,
+        DEFAULT_QUOTA_PARAMETER_NAME: defaultQuotaParameter.parameterName
       },
       timeout: cdk.Duration.minutes(15),
       memorySize: 512,
@@ -762,6 +777,14 @@ export class LlmGatewayStack extends cdk.Stack {
     // Add GET endpoint
     quotaResource.addMethod('GET', new apigw.LambdaIntegration(quotaHandler), {
       authorizer: quotaAuthorizerGet
+    });
+
+    // Add a new resource for the summary under quota
+    const summaryResource = quotaResource.addResource('summary');
+
+    // Add GET method for the /quota/summary endpoint
+    summaryResource.addMethod('GET', new apigw.LambdaIntegration(quotaHandler), {
+        authorizer: quotaAuthorizerGetSummary
     });
 
     // Add POST endpoint
