@@ -385,8 +385,6 @@ with right_column:
     - Model Selected: {st.session_state.model_selection}
     - Model Id: {st.session_state.model_id}
     - User: {username}
-    - Quota Plan: Daily
-    - Estimated usage for this period: \$ {estimated_usage_str} / \$ {quota_limit}
     - ChatId: {thread_safe_session_state.get("chat_id")}
     """)
 

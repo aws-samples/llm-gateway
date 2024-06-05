@@ -50,6 +50,11 @@ cd -
 cd ../lambdas/api_key
 ./build_and_deploy.sh $ECR_API_KEY_REPOSITORY
 
+cd -
+
+cd ../lambdas/quota
+./build_and_deploy.sh $ECR_QUOTA_REPOSITORY
+
 #navigate back to the original directory
 cd -
 
@@ -71,6 +76,10 @@ echo $ECR_API_KEY_REPOSITORY
 echo $ECR_LLM_GATEWAY_REPOSITORY
 echo $LLM_GATEWAY_IS_PUBLIC
 echo $SERVERLESS_API
+echo $DEFAULT_QUOTA_FREQUENCY
+echo $DEFAULT_QUOTA_DOLLARS
+echo $ECR_QUOTA_REPOSITORY
+echo $ADMIN_LIST
 cd ../streamlit
 ./build_and_deploy.sh $ECR_STREAMLIT_REPOSITORY
 
@@ -111,6 +120,10 @@ cdk deploy "$STACK_NAME" \
 --context llmGatewayDomainName=$LLM_GATEWAY_DOMAIN_NAME \
 --context llmGatewayIsPublic=$LLM_GATEWAY_IS_PUBLIC \
 --context serverlessApi=$SERVERLESS_API \
+--context defaultQuotaFrequency=$DEFAULT_QUOTA_FREQUENCY \
+--context defaultQuotaDollars=$DEFAULT_QUOTA_DOLLARS \
+--context quotaRepoName=$ECR_QUOTA_REPOSITORY \
+--context adminList=$ADMIN_LIST \
 --context salt=$SALT \
 --outputs-file ./outputs.json
 
@@ -124,6 +137,7 @@ if [ $? -eq 0 ]; then
     API_KEY_LAMBDA_FUNCTION_NAME=$(jq -r ".\"${STACK_NAME}\".ApiKeyLambdaFunctionName" ./outputs.json)
     LLM_GATEWAY_LAMBDA_FUNCTION=$(jq -r ".\"${STACK_NAME}\".LlmgatewayLambdaFunctionName" ./outputs.json)
     LLM_GATEWAY_ECS_TASK=$(jq -r ".\"${STACK_NAME}\".LlmgatewayEcsTask" ./outputs.json)
+    QUOTA_LAMBDA_FUNCTION_NAME=$(jq -r ".\"${STACK_NAME}\".QuotaLambdaFunctionName" ./outputs.json)
 
     # Write outputs to a file with modified keys and format
     echo "UserPoolID=$USER_POOL_ID" > resources.txt
@@ -145,6 +159,11 @@ if [ $? -eq 0 ]; then
     aws lambda update-function-code \
         --function-name $API_KEY_LAMBDA_FUNCTION_NAME \
         --image-uri $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_API_KEY_REPOSITORY:latest \
+        --region $AWS_REGION
+
+    aws lambda update-function-code \
+        --function-name $QUOTA_LAMBDA_FUNCTION_NAME \
+        --image-uri $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_QUOTA_REPOSITORY:latest \
         --region $AWS_REGION
 
     aws ecs update-service \

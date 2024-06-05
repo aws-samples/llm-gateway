@@ -22,6 +22,7 @@ import * as elbv2Actions from "aws-cdk-lib/aws-elasticloadbalancingv2-actions";
 import * as route53 from "aws-cdk-lib/aws-route53";
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as targets from 'aws-cdk-lib/aws-elasticloadbalancingv2-targets';
+import * as ssm from "aws-cdk-lib/aws-ssm";
 
 /* At present, this repository supports:
  *  "ai21.j2-mid-v1": {},
@@ -71,13 +72,21 @@ export class LlmGatewayStack extends cdk.Stack {
   llmGatewayDomainName = String(this.node.tryGetContext("llmGatewayDomainName"));
   llmGatewayIsPublic = String(this.node.tryGetContext("llmGatewayIsPublic")).toLowerCase() == "true";
   serverlessApi = String(this.node.tryGetContext("serverlessApi")).toLowerCase() == "true";
+  defaultQuotaFrequency = String(this.node.tryGetContext("defaultQuotaFrequency"));
+  defaultQuotaDollars = String(this.node.tryGetContext("defaultQuotaDollars"));
+  quotaRepoName = this.node.tryGetContext("quotaRepoName");
+  adminList = this.node.tryGetContext("adminList");
 
-  apiKeyValueHashIndex = "ApiKeyValueHashIndex"
-  apiKeyTableName = "ApiKeyTable"
-  apiKeyTablePartitionKey = "username"
-  apiKeyTableSortKey = "api_key_name"
-  apiKeyTableIndexPartitionKey = "api_key_value_hash"
+  apiKeyValueHashIndex = "ApiKeyValueHashIndex";
+  apiKeyTableName = "ApiKeyTable";
+  apiKeyTablePartitionKey = "username";
+  apiKeyTableSortKey = "api_key_name";
+  apiKeyTableIndexPartitionKey = "api_key_value_hash";
   apiKeyHandlerFunctionName = "apiKeyHandlerFunction";
+  quotaTableName = "QuotaTable";
+  quotaTablePartitionKey = "username";
+  quotaTableSortKey = "document_type_id";
+  quotaHandlerFunctionName = "quotaHandlerFunciton";
 
   userPool: cognito.IUserPool;
   applicationLoadBalanceruserPoolClient: cognito.IUserPoolClient;
@@ -166,8 +175,8 @@ export class LlmGatewayStack extends cdk.Stack {
     tableName: string,
     partitionKeyName: string,
     sortKeyName: string,
-    secondaryIndexName: string,
-    secondaryIndexPartitionKeyName: string
+    secondaryIndexName: string | null,
+    secondaryIndexPartitionKeyName: string | null
   ) {
     const table = new dynamodb.Table(this, tableName, {
       partitionKey: {
@@ -183,15 +192,17 @@ export class LlmGatewayStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    // Adding a Global Secondary Index for the secondary index using provided parameters
-    table.addGlobalSecondaryIndex({
-      indexName: secondaryIndexName,
-      partitionKey: {
-        name: secondaryIndexPartitionKeyName,
-        type: dynamodb.AttributeType.STRING,
-      },
-      projectionType: dynamodb.ProjectionType.ALL, // Determines which attributes will be copied to the index
-    });
+    if (secondaryIndexName && secondaryIndexPartitionKeyName) {
+      // Adding a Global Secondary Index for the secondary index using provided parameters
+      table.addGlobalSecondaryIndex({
+        indexName: secondaryIndexName,
+        partitionKey: {
+          name: secondaryIndexPartitionKeyName,
+          type: dynamodb.AttributeType.STRING,
+        },
+        projectionType: dynamodb.ProjectionType.ALL, // Determines which attributes will be copied to the index
+      });
+    }
 
     return table;
   };
@@ -199,9 +210,11 @@ export class LlmGatewayStack extends cdk.Stack {
   createLlmGatewayRole(
     roleName: string,
     chatHistoryTable: dynamodb.Table,
+    quotaTable: dynamodb.Table,
     apiKeyTable: dynamodb.Table,
     apiKeyValueHashIndex: string,
     secret: secretsmanager.Secret,
+    defaultQuotaParameter: ssm.StringParameter,
     assumedBy: iam.ServicePrincipal
   ) {
     const resourceArn = null;
@@ -232,7 +245,7 @@ export class LlmGatewayStack extends cdk.Stack {
                 "dynamodb:Scan",
                 "dynamodb:UpdateItem",
               ],
-              resources: [chatHistoryTable.tableArn, apiKeyTable.tableArn, `${apiKeyTable.tableArn}/index/${apiKeyValueHashIndex}`],
+              resources: [chatHistoryTable.tableArn, apiKeyTable.tableArn, `${apiKeyTable.tableArn}/index/${apiKeyValueHashIndex}`, quotaTable.tableArn],
             }),
             new iam.PolicyStatement({
               effect: iam.Effect.ALLOW,
@@ -252,6 +265,11 @@ export class LlmGatewayStack extends cdk.Stack {
               ],
               resources: ["*"],
             }),
+            new iam.PolicyStatement({
+              actions: ['ssm:GetParameter'],
+              resources: [defaultQuotaParameter.parameterArn],
+              effect: iam.Effect.ALLOW
+            })
           ],
         }),
       },
@@ -308,6 +326,52 @@ export class LlmGatewayStack extends cdk.Stack {
     })
   }
 
+  createQuotaLambdaRole(
+    roleName: string, 
+    quotaTable: dynamodb.ITable,
+    defaultQuotaParameter:ssm.StringParameter
+  ) {
+    return new iam.Role(this, roleName, {
+      assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
+      roleName: roleName,
+      inlinePolicies: {
+        LambdaPermissions: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              sid: "ApiKeyDynamoDBAccess",
+              effect: iam.Effect.ALLOW,
+              actions: [
+                "dynamodb:BatchWriteItem",
+                "dynamodb:DeleteItem",
+                "dynamodb:GetItem",
+                "dynamodb:PutItem",
+                "dynamodb:Query",
+                "dynamodb:Scan",
+                "dynamodb:UpdateItem",
+              ],
+              resources: [quotaTable.tableArn],
+            }),
+            new iam.PolicyStatement({
+              sid: "WriteToCloudWatchLogs",
+              effect: iam.Effect.ALLOW,
+              actions: [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents",
+              ],
+              resources: ["*"],
+            }),
+            new iam.PolicyStatement({
+              actions: ['ssm:GetParameter'],
+              resources: [defaultQuotaParameter.parameterArn],
+              effect: iam.Effect.ALLOW
+            })
+          ]
+        })
+      }
+    })
+  }
+
   configureVpcParams(): object {
     if (
       Boolean(this.vpc) &&
@@ -344,8 +408,31 @@ export class LlmGatewayStack extends cdk.Stack {
   createAlbApi(
     chatHistoryTable: dynamodb.Table,
     apiKeyEcr: ecr.IRepository,
-    llmGatewayApiEcr: ecr.IRepository
+    llmGatewayApiEcr: ecr.IRepository,
+    quotaEcr: ecr.IRepository,
   ) {
+    let parameterValue: { [key: string]: string } = {};
+    parameterValue[this.defaultQuotaFrequency] = this.defaultQuotaDollars;
+
+    // Serialize the map to a JSON string
+    const parameterValueString = JSON.stringify(parameterValue);
+
+    // Store the serialized map in SSM Parameter Store
+    const defaultQuotaParameter = new ssm.StringParameter(this, 'MyParameter', {
+      parameterName: 'defaultQuota',
+      stringValue: parameterValueString,
+      description: 'This parameter stores the default quota for users',
+      tier: ssm.ParameterTier.STANDARD
+    });
+
+    const quotaTable = this.createSecureDdbTableWithSortKey(
+      this.quotaTableName,
+      this.quotaTablePartitionKey,
+      this.quotaTableSortKey,
+      null,
+      null
+    )
+
     const saltSecret = this.createSaltSecret()
 
     const apiKeyTable = this.createSecureDdbTableWithSortKey(
@@ -355,8 +442,6 @@ export class LlmGatewayStack extends cdk.Stack {
       this.apiKeyValueHashIndex, 
       this.apiKeyTableIndexPartitionKey
     )
-
-    
 
     this.setUpCognito()
 
@@ -387,6 +472,8 @@ export class LlmGatewayStack extends cdk.Stack {
       SALT_SECRET: saltSecret.secretName,
       USER_POOL_ID: this.userPool.userPoolId,
       APP_CLIENT_ID: this.applicationLoadBalanceruserPoolClient.userPoolClientId,
+      QUOTA_TABLE_NAME: quotaTable.tableName,
+      DEFAULT_QUOTA_PARAMETER_NAME: defaultQuotaParameter.parameterName
     }
 
     // Create a Security Group for the private ALB that only allows traffic from within the VPC
@@ -405,9 +492,11 @@ export class LlmGatewayStack extends cdk.Stack {
       const lambdaRole = this.createLlmGatewayRole(
         "llmGatewayLambdaRole",
         chatHistoryTable,
+        quotaTable,
         apiKeyTable,
         this.apiKeyValueHashIndex,
         saltSecret,
+        defaultQuotaParameter,
         new iam.ServicePrincipal("lambda.amazonaws.com")
       )
       const fn = new lambda.DockerImageFunction(this, "llmGatewayLambda", {
@@ -449,9 +538,11 @@ export class LlmGatewayStack extends cdk.Stack {
       const ecsExecutionRole = this.createLlmGatewayRole(
         "llmGatewayEcsRole",
         chatHistoryTable,
+        quotaTable,
         apiKeyTable,
         this.apiKeyValueHashIndex,
         saltSecret,
+        defaultQuotaParameter,
         new iam.ServicePrincipal('ecs-tasks.amazonaws.com')
       )
       ecsExecutionRole.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonECSTaskExecutionRolePolicy'));
@@ -505,6 +596,7 @@ export class LlmGatewayStack extends cdk.Stack {
     }
 
     const apiKeyApi = this.createApiKeyHandlerApi(apiKeyTable, saltSecret, vpcParams, apiKeyEcr)
+    const quotaApi = this.createQuotaHandlerApi(quotaTable, vpcParams, quotaEcr, defaultQuotaParameter)
 
     let llmGatewayAlb : elbv2.ApplicationLoadBalancer;
     if (this.llmGatewayIsPublic) {
@@ -579,7 +671,7 @@ export class LlmGatewayStack extends cdk.Stack {
     });
 
     //Replace api.apiEndpoint with the url of the application load balancer
-    this.setUpStreamlit(vpc, LlmGatewayUrl, apiKeyApi)
+    this.setUpStreamlit(vpc, LlmGatewayUrl, apiKeyApi, quotaApi)
   }
 
   createSaltSecret() : secretsmanager.Secret {
@@ -589,6 +681,134 @@ export class LlmGatewayStack extends cdk.Stack {
         generateStringKey: 'dummyKey'  // Required by AWS but not used since we provide the complete template
       }
     });
+  }
+
+  createQuotaHandlerApi(quotaTable: dynamodb.ITable, vpcParams: object, quotaHandlerEcr: ecr.IRepository, defaultQuotaParameter:ssm.StringParameter) {
+    const authHandler = new lambdaNode.NodejsFunction(this, "AuthHandlerFunctionQuota", {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      entry: path.join(__dirname, "authorizer/index.ts"),
+      architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
+      environment: {
+        USER_POOL_ID: this.userPool.userPoolId,
+        APP_CLIENT_ID: this.applicationLoadBalanceruserPoolClient.userPoolClientId,
+        ADMIN_ONLY: "true",
+        ADMIN_LIST: this.adminList,
+        COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix,
+        REGION: this.regionValue
+      },
+      bundling: {
+        minify: false,
+      },
+      role: new iam.Role(this, "QuotaAuthHandlerRole", {
+        assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
+        roleName: "QuotaAuthHandlerRole",
+        inlinePolicies: {
+          LambdaPermissions: new iam.PolicyDocument({
+            statements: [
+              new iam.PolicyStatement({
+                sid: "WriteToCloudWatchLogs",
+                effect: iam.Effect.ALLOW,
+                actions: [
+                  "logs:CreateLogGroup",
+                  "logs:CreateLogStream",
+                  "logs:PutLogEvents",
+                ],
+                resources: ["*"],
+              }),
+            ],
+          }),
+        },
+      })
+    });
+
+    const quotaAuthorizerGet = new apigw.TokenAuthorizer(this,
+      "QuotaAuthorizerGet",
+      {
+        handler: authHandler,
+        identitySource: "method.request.header.Authorization",
+      },
+    )
+
+    const quotaAuthorizerGetSummary = new apigw.TokenAuthorizer(this,
+      "QuotaAuthorizerGetSummary",
+      {
+        handler: authHandler,
+        identitySource: "method.request.header.Authorization",
+      },
+    )
+
+    const quotaAuthorizerPost = new apigw.TokenAuthorizer(this,
+      "QuotaAuthorizerPost",
+      {
+        handler: authHandler,
+        identitySource: "method.request.header.Authorization",
+      },
+    )
+
+    const quotaAuthorizerDelete = new apigw.TokenAuthorizer(this,
+      "QuotaAuthorizerDelete",
+      {
+        handler: authHandler,
+        identitySource: "method.request.header.Authorization",
+      },
+    )
+
+    const quotaApi = new apigw.RestApi(this, "LlmGatewayQuota", {
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigw.Cors.ALL_ORIGINS,
+        allowMethods: apigw.Cors.ALL_METHODS,  // Make sure POST is included
+        allowHeaders: ['Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'],
+        allowCredentials: true,
+      },
+    });
+
+    const quotaHandler = new lambda.DockerImageFunction(this, 'quotaHandler', {
+      functionName: this.quotaHandlerFunctionName,
+      code: lambda.DockerImageCode.fromEcr(quotaHandlerEcr, { tag: "latest" }),
+      role: this.createQuotaLambdaRole("quotaHandlerRole", quotaTable, defaultQuotaParameter),
+      architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
+      environment: {
+        REGION: this.regionValue,
+        QUOTA_TABLE_NAME: quotaTable.tableName,
+        DEFAULT_QUOTA_PARAMETER_NAME: defaultQuotaParameter.parameterName
+      },
+      timeout: cdk.Duration.minutes(15),
+      memorySize: 512,
+      ...vpcParams,
+    });
+
+    const quotaResource = quotaApi.root.addResource('quota');
+
+    // Add GET endpoint
+    quotaResource.addMethod('GET', new apigw.LambdaIntegration(quotaHandler), {
+      authorizer: quotaAuthorizerGet
+    });
+
+    // Add a new resource for the summary under quota
+    const summaryResource = quotaResource.addResource('summary');
+
+    // Add GET method for the /quota/summary endpoint
+    summaryResource.addMethod('GET', new apigw.LambdaIntegration(quotaHandler), {
+        authorizer: quotaAuthorizerGetSummary
+    });
+
+    // Add POST endpoint
+    quotaResource.addMethod('POST', new apigw.LambdaIntegration(quotaHandler), {
+      authorizer: quotaAuthorizerPost
+    });
+
+    // Add DELETE endpoint
+    quotaResource.addMethod('DELETE', new apigw.LambdaIntegration(quotaHandler), {
+      authorizer: quotaAuthorizerDelete
+    });
+
+    new cdk.CfnOutput(this, 'QuotaLambdaFunctionName', {
+      value: quotaHandler.functionName,
+      description: 'Name of the api key lambda function'
+    });
+
+    return quotaApi
+
   }
 
   createApiKeyHandlerApi(apiKeyTable: dynamodb.ITable, saltSecret: secretsmanager.ISecret, vpcParams: object, apiKeyEcr: ecr.IRepository) : apigw.RestApi {
@@ -835,7 +1055,7 @@ export class LlmGatewayStack extends cdk.Stack {
         });
   }
 
-  setUpStreamlit(vpc: ec2.Vpc, apiUrl: string, apiKeyApi: apigw.RestApi) {
+  setUpStreamlit(vpc: ec2.Vpc, apiUrl: string, apiKeyApi: apigw.RestApi, quotaApi: apigw.RestApi) {
     // Create ECS Cluster
     const cluster = new ecs.Cluster(this, 'AppCluster', {
       vpc,
@@ -876,9 +1096,9 @@ export class LlmGatewayStack extends cdk.Stack {
       image: ecs.ContainerImage.fromEcrRepository(ecrRepoStreamlit, "latest"),
       logging: ecs.LogDrivers.awsLogs({ logGroup, streamPrefix: 'streamlit' }),
       environment: {
-        //Could be websocket or rest. Streamlit code will look at the url and behave accordingly
         ApiUrl: apiUrl,
-        ApiKeyURL: apiKeyApi.url
+        ApiKeyURL: apiKeyApi.url,
+        QuotaURL: quotaApi.url
       },
       healthCheck: {
         command: ['CMD-SHELL', 'curl -f http://localhost:8501/healthz || exit 1'],
@@ -1032,6 +1252,12 @@ export class LlmGatewayStack extends cdk.Stack {
       this.llmGatewayRepoName!
     );
 
-    this.createAlbApi(chatHistoryTable, apiKeyEcrRepo, llmGatewayEcrRepo)
+    const quotaEcrRepo = ecr.Repository.fromRepositoryName(
+      this,
+      this.quotaRepoName!,
+      this.quotaRepoName!
+    );
+
+    this.createAlbApi(chatHistoryTable, apiKeyEcrRepo, llmGatewayEcrRepo, quotaEcrRepo)
   }
 }

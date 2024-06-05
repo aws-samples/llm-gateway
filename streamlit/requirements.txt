@@ -6,3 +6,4 @@ pyjwt==2.8.0
 streamlit-float==0.3.4
 requests==2.32.2
 openai==1.30.5
+aiohttp==3.9.5

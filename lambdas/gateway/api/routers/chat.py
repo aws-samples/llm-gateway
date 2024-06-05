@@ -7,12 +7,16 @@ from api.auth import api_key_auth
 from api.models import get_model
 from api.schema import ChatRequest, ChatResponse, ChatStreamResponse
 from api.setting import DEFAULT_MODEL
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from api.quota import check_quota
 
 router = APIRouter(
     prefix="/chat",
-    dependencies=[Depends(api_key_auth)],
+    #dependencies=[Depends(api_key_auth)],
     # responses={404: {"description": "Not found"}},
 )
+
+security = HTTPBearer()
 
 
 @router.post("/completions", response_model=ChatResponse | ChatStreamResponse, response_model_exclude_none=True)
@@ -30,8 +34,12 @@ async def chat_completions(
                     }
                 ],
             ),
-        ]
+        ],
+        credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)]
 ):
+    user_name = api_key_auth(credentials)
+    check_quota(user_name)
+
     if chat_request.model.lower().startswith("gpt-"):
         chat_request.model = DEFAULT_MODEL
         
@@ -39,6 +47,6 @@ async def chat_completions(
     model = get_model(chat_request.model)
     if chat_request.stream:
         return StreamingResponse(
-            content=model.chat_stream(chat_request), media_type="text/event-stream"
+            content=model.chat_stream(chat_request, user_name), media_type="text/event-stream"
         )
     return model.chat(chat_request)
