@@ -91,7 +91,7 @@ def generate_api_key(key_size=32):
   # Convert bytes to a URL-safe base64 string (optional for readability)
   api_key = random_bytes.hex()  # Or base64.urlsafe_b64encode(random_bytes).decode('utf-8')
 
-  return api_key
+  return "sk-" + api_key
 
 def hash_api_key(api_key_value):
     """
