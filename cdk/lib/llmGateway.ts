@@ -595,8 +595,18 @@ export class LlmGatewayStack extends cdk.Stack {
       });
     }
 
-    const apiKeyApi = this.createApiKeyHandlerApi(apiKeyTable, saltSecret, vpcParams, apiKeyEcr)
-    const quotaApi = this.createQuotaHandlerApi(quotaTable, vpcParams, quotaEcr, defaultQuotaParameter)
+    const api = new apigw.RestApi(this, "LlmGatewayApiGateway", {
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigw.Cors.ALL_ORIGINS,
+        allowMethods: apigw.Cors.ALL_METHODS,  // Make sure POST is included
+        allowHeaders: ['Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'],
+        allowCredentials: true,
+      },
+    });
+
+
+    const apiKeyApi = this.createApiKeyHandlerApi(api, apiKeyTable, saltSecret, vpcParams, apiKeyEcr)
+    const quotaApi = this.createQuotaHandlerApi(api, quotaTable, vpcParams, quotaEcr, defaultQuotaParameter)
 
     let llmGatewayAlb : elbv2.ApplicationLoadBalancer;
     if (this.llmGatewayIsPublic) {
@@ -683,7 +693,7 @@ export class LlmGatewayStack extends cdk.Stack {
     });
   }
 
-  createQuotaHandlerApi(quotaTable: dynamodb.ITable, vpcParams: object, quotaHandlerEcr: ecr.IRepository, defaultQuotaParameter:ssm.StringParameter) {
+  createQuotaHandlerApi(api: apigw.RestApi, quotaTable: dynamodb.ITable, vpcParams: object, quotaHandlerEcr: ecr.IRepository, defaultQuotaParameter:ssm.StringParameter) {
     const authHandler = new lambdaNode.NodejsFunction(this, "AuthHandlerFunctionQuota", {
       runtime: lambda.Runtime.NODEJS_20_X,
       entry: path.join(__dirname, "authorizer/index.ts"),
@@ -753,15 +763,6 @@ export class LlmGatewayStack extends cdk.Stack {
       },
     )
 
-    const quotaApi = new apigw.RestApi(this, "LlmGatewayQuota", {
-      defaultCorsPreflightOptions: {
-        allowOrigins: apigw.Cors.ALL_ORIGINS,
-        allowMethods: apigw.Cors.ALL_METHODS,  // Make sure POST is included
-        allowHeaders: ['Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'],
-        allowCredentials: true,
-      },
-    });
-
     const quotaHandler = new lambda.DockerImageFunction(this, 'quotaHandler', {
       functionName: this.quotaHandlerFunctionName,
       code: lambda.DockerImageCode.fromEcr(quotaHandlerEcr, { tag: "latest" }),
@@ -777,7 +778,7 @@ export class LlmGatewayStack extends cdk.Stack {
       ...vpcParams,
     });
 
-    const quotaResource = quotaApi.root.addResource('quota');
+    const quotaResource = api.root.addResource('quota');
 
     // Add GET endpoint
     quotaResource.addMethod('GET', new apigw.LambdaIntegration(quotaHandler), {
@@ -807,11 +808,11 @@ export class LlmGatewayStack extends cdk.Stack {
       description: 'Name of the api key lambda function'
     });
 
-    return quotaApi
+    return api
 
   }
 
-  createApiKeyHandlerApi(apiKeyTable: dynamodb.ITable, saltSecret: secretsmanager.ISecret, vpcParams: object, apiKeyEcr: ecr.IRepository) : apigw.RestApi {
+  createApiKeyHandlerApi(api: apigw.RestApi, apiKeyTable: dynamodb.ITable, saltSecret: secretsmanager.ISecret, vpcParams: object, apiKeyEcr: ecr.IRepository) : apigw.RestApi {
     const authHandler = new lambdaNode.NodejsFunction(this, "AuthHandlerFunction", {
       runtime: lambda.Runtime.NODEJS_20_X,
       entry: path.join(__dirname, "authorizer/index.ts"),
@@ -869,15 +870,6 @@ export class LlmGatewayStack extends cdk.Stack {
       },
     )
 
-    const apiKeyapi = new apigw.RestApi(this, "LlmGatewayApiKey", {
-      defaultCorsPreflightOptions: {
-        allowOrigins: apigw.Cors.ALL_ORIGINS,
-        allowMethods: apigw.Cors.ALL_METHODS,  // Make sure POST is included
-        allowHeaders: ['Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'],
-        allowCredentials: true,
-      },
-    });
-
     const apiKeyHandler = new lambda.DockerImageFunction(this, 'apiKeyHandler', {
       functionName: this.apiKeyHandlerFunctionName,
       code: lambda.DockerImageCode.fromEcr(apiKeyEcr, { tag: "latest" }),
@@ -894,7 +886,7 @@ export class LlmGatewayStack extends cdk.Stack {
       ...vpcParams,
     });
 
-    const apiKeyResource = apiKeyapi.root.addResource('apikey');
+    const apiKeyResource = api.root.addResource('apikey');
 
     // Add GET endpoint
     apiKeyResource.addMethod('GET', new apigw.LambdaIntegration(apiKeyHandler), {
@@ -916,7 +908,7 @@ export class LlmGatewayStack extends cdk.Stack {
       description: 'Name of the api key lambda function'
     });
 
-    return apiKeyapi
+    return api
   }
 
   setUpCognito() {
