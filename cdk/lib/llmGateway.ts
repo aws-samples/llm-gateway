@@ -75,6 +75,7 @@ export class LlmGatewayStack extends cdk.Stack {
   defaultQuotaFrequency = String(this.node.tryGetContext("defaultQuotaFrequency"));
   defaultQuotaDollars = String(this.node.tryGetContext("defaultQuotaDollars"));
   quotaRepoName = this.node.tryGetContext("quotaRepoName");
+  adminList = this.node.tryGetContext("adminList");
 
   apiKeyValueHashIndex = "ApiKeyValueHashIndex";
   apiKeyTableName = "ApiKeyTable";
@@ -690,6 +691,10 @@ export class LlmGatewayStack extends cdk.Stack {
       environment: {
         USER_POOL_ID: this.userPool.userPoolId,
         APP_CLIENT_ID: this.applicationLoadBalanceruserPoolClient.userPoolClientId,
+        ADMIN_ONLY: "true",
+        ADMIN_LIST: this.adminList,
+        COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix,
+        REGION: this.regionValue
       },
       bundling: {
         minify: false,

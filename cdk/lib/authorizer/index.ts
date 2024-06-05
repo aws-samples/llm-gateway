@@ -1,53 +1,48 @@
 import { APIGatewayRequestAuthorizerHandler } from "aws-lambda";
 import { CognitoJwtVerifier } from "aws-jwt-verify";
+import fetch from 'node-fetch';
 // import { DynamoDBClient, QueryCommand } from "@aws-sdk/client-dynamodb";
 // import { SecretsManager } from "@aws-sdk/client-secrets-manager";
 // import { createHash } from 'crypto';
 
 const UserPoolId = process.env.USER_POOL_ID!;
 const AppClientId = process.env.APP_CLIENT_ID!;
-//const awsRegion = process.env.AWS_REGION;
-// const apiKeyTableName = process.env.API_KEY_TABLE_NAME
-// const saltSecret = process.env.SALT_SECRET;
+const AdminOnly = process.env.ADMIN_ONLY?.toLowerCase() === 'true';
 
-// const secretsManagerClient = new SecretsManager({
-//   region: awsRegion  // specify your region
-// });
+const AdminList = process.env.ADMIN_LIST ? process.env.ADMIN_LIST.split(',').map(item => item.trim()) : [];
+const CognitoDomainPrefix = process.env.COGNITO_DOMAIN_PREFIX!
+const Region = process.env.REGION!
 
-// async function getSalt(): Promise<string> {
-//   try {
-//     const data = await secretsManagerClient.getSecretValue({
-//       SecretId: saltSecret
-//     });
+console.log("AdminOnly:", AdminOnly);
+console.log("AdminList:", AdminList);
+console.log("CognitoDomainPrefix:", CognitoDomainPrefix);
+console.log("Region:", Region);
 
-//     if (data.SecretString) {
-//       const secret = JSON.parse(data.SecretString);
-//       console.log(`Salt: ${secret.salt}`);
-//       return secret.salt;
-//     }
-//   } catch (e) {
-//     console.error(`Unable to retrieve secret: ${e}`);
-//     return "";
-//   }
-//   console.error(`Unable to retrieve secret:`);
-//   return "";
-// }
+async function getUsername(encodedToken: string): Promise<string> {
+  const userInfo = await getUserInfo(encodedToken);
+  return userInfo.preferred_username;
+}
 
+async function getUserInfo(encodedToken: string): Promise<any> {
 
-// interface ApiKeyDetails {
-//   username?: string;
-//   api_key_name?: string;
-//   expiration_timestamp?:string;
-// }
+  const url = `https://${CognitoDomainPrefix}.auth.${Region}.amazoncognito.com/oauth2/userInfo`;
 
-// function is_expired(timestamp: string): boolean {
-//   // Convert the timestamp string to a number in milliseconds
-//   const timestampInMilliseconds = parseFloat(timestamp) * 1000;
-//   // Get the current timestamp in milliseconds
-//   const currentTimestamp = Date.now();
-//   // Return true if the current timestamp is greater than the timestamp argument
-//   return currentTimestamp > timestampInMilliseconds;
-// }
+  const headers = {
+      'Authorization': `Bearer ${encodedToken}`
+  };
+
+  try {
+      const response = await fetch(url, { headers });
+      if (response.ok) {
+          return await response.json(); // Returns the user info as a JSON object
+      } else {
+          return { statusCode: response.status, statusText: await response.text() }; // Returns error status and message if not successful
+      }
+  } catch (error) {
+      console.error('Request failed:', error);
+      throw error; // Throw an error to handle it in the caller function
+  }
+}
 
 
 export const handler: APIGatewayRequestAuthorizerHandler = async (event, context) => {
@@ -59,50 +54,30 @@ export const handler: APIGatewayRequestAuthorizerHandler = async (event, context
     });
     console.log("Event:", event);
 
-    // Ensure headers exist and get the token from the Authorization header
     const encodedToken = getEncodedToken(event);
 
     const payload = await verifier.verify(encodedToken);
     console.log("Token is valid. Payload:", payload);
 
-    return allowPolicy(event.methodArn, payload);
-  // } catch (error: any) {
-  //   console.log(error.message);
-  //   console.log("Event:", event);
-  //   const apiKeyValue = getEncodedTokenOrApiKey(event);
-  //   const salt = await getSalt();
-  //   const apiKeyHash = hashApiKey(apiKeyValue, salt)
-  //   const itemDetails = await queryByApiKeyHash(apiKeyHash)
-  //   try {
-  //     if (itemDetails) {
-  //       console.log("Username:", itemDetails.username);
-  //       console.log("API Key Name:", itemDetails.api_key_name);
-  //       if (itemDetails.expiration_timestamp) {
-  //         if(is_expired(itemDetails.expiration_timestamp)) {
-  //           console.log(`API key ${itemDetails.api_key_name} with timestamp: ${itemDetails.expiration_timestamp} is expired.`);
-  //           return denyAllPolicy();
-  //         } else {
-  //           console.log(`API key ${itemDetails.api_key_name} with timestamp: ${itemDetails.expiration_timestamp} is valid.`);
-  //         }
-  //       }
+    if (AdminOnly){
+        const username = await getUsername(encodedToken);
 
-  //       return allowPolicy(event.methodArn, itemDetails.username);
-  //     } else {
-  //       console.log("No items found for the provided API key hash.");
-  //       return denyAllPolicy();
-  //     }
+        if (!AdminList.includes(username)) {
+            console.log(`User ${username} is not an admin, denying access.`)
+            return denyAllPolicy();
+        }
+        console.log(`User ${username} is an admin, granting access.`)
+
+    } else {
+      console.log("User doesn't need to be an admin, granting access.")
+    }
+
+    return allowPolicy(event.methodArn, payload);
   } catch (error: any) {
     console.log(error.message);
     return denyAllPolicy();
   }
 };
-
-// function hashApiKey(apiKeyValue: string, salt: string): string {
-//   const hasher = createHash('sha256');
-//   const saltedInput = salt + apiKeyValue;
-//   hasher.update(saltedInput, 'utf-8'); // Ensure the input is treated as UTF-8 encoded string
-//   return hasher.digest('hex'); // Return the hash as a hexadecimal string
-// }
 
 function getEncodedToken(event: any) {
   // Ensure headers exist and get the token from the Authorization header
@@ -118,41 +93,8 @@ function getEncodedToken(event: any) {
 
   const tokenParts = authorizationHeader.split(' ');
   if (tokenParts[0] !== 'Bearer' || tokenParts.length !== 2) throw new Error("Invalid Authorization token format");
-  const encodedToken = tokenParts[1];
-  return encodedToken;
+  return tokenParts[1];
 }
-
-// async function queryByApiKeyHash(apiKeyHash: string): Promise<ApiKeyDetails | null> {
-//   const client = new DynamoDBClient({ region: awsRegion }); // Specify the AWS region
-//   const tableName = apiKeyTableName;
-
-//   const queryCommand = new QueryCommand({
-//       TableName: tableName,
-//       IndexName: "ApiKeyValueHashIndex",
-//       KeyConditionExpression: "api_key_value_hash = :hash_value",
-//       ExpressionAttributeValues: {
-//           ":hash_value": { S: apiKeyHash }
-//       },
-//   });
-
-//   try {
-//       const response = await client.send(queryCommand);
-//       const items = response.Items;
-
-//       if (items && items.length > 0) {
-//           const item = items[0];
-//           return {
-//               username: item.username?.S,
-//               api_key_name: item.api_key_name?.S,
-//               expiration_timestamp: item?.expiration_timestamp?.S
-//           };
-//       }
-//       return null;
-//   } catch (error) {
-//       console.error("Query failed:", error);
-//       return null;
-//   }
-// }
 
 const denyAllPolicy = () => {
   return {

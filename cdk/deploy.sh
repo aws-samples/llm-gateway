@@ -79,6 +79,7 @@ echo $SERVERLESS_API
 echo $DEFAULT_QUOTA_FREQUENCY
 echo $DEFAULT_QUOTA_DOLLARS
 echo $ECR_QUOTA_REPOSITORY
+echo $ADMIN_LIST
 cd ../streamlit
 ./build_and_deploy.sh $ECR_STREAMLIT_REPOSITORY
 
@@ -122,6 +123,7 @@ cdk deploy "$STACK_NAME" \
 --context defaultQuotaFrequency=$DEFAULT_QUOTA_FREQUENCY \
 --context defaultQuotaDollars=$DEFAULT_QUOTA_DOLLARS \
 --context quotaRepoName=$ECR_QUOTA_REPOSITORY \
+--context adminList=$ADMIN_LIST \
 --context salt=$SALT \
 --outputs-file ./outputs.json
 
