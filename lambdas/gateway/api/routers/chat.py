@@ -9,6 +9,7 @@ from api.schema import ChatRequest, ChatResponse, ChatStreamResponse
 from api.setting import DEFAULT_MODEL
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from api.quota import check_quota
+from api.model_access import check_model_access
 
 router = APIRouter(
     prefix="/chat",
@@ -38,6 +39,7 @@ async def chat_completions(
         credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)]
 ):
     user_name = api_key_auth(credentials)
+    check_model_access(user_name, chat_request.model)
     check_quota(user_name)
 
     if chat_request.model.lower().startswith("gpt-"):

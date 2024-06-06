@@ -80,6 +80,7 @@ echo $DEFAULT_QUOTA_FREQUENCY
 echo $DEFAULT_QUOTA_DOLLARS
 echo $ECR_QUOTA_REPOSITORY
 echo $ADMIN_LIST
+echo $DEFAULT_MODEL_ACCESS
 cd ../streamlit
 ./build_and_deploy.sh $ECR_STREAMLIT_REPOSITORY
 
@@ -125,6 +126,7 @@ cdk deploy "$STACK_NAME" \
 --context quotaRepoName=$ECR_QUOTA_REPOSITORY \
 --context adminList=$ADMIN_LIST \
 --context salt=$SALT \
+--context defaultModelAccess=$DEFAULT_MODEL_ACCESS \
 --outputs-file ./outputs.json
 
 # Check if the deployment was successful

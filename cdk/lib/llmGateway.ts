@@ -76,6 +76,7 @@ export class LlmGatewayStack extends cdk.Stack {
   defaultQuotaDollars = String(this.node.tryGetContext("defaultQuotaDollars"));
   quotaRepoName = this.node.tryGetContext("quotaRepoName");
   adminList = this.node.tryGetContext("adminList");
+  defaultModelAccess = this.node.tryGetContext("defaultModelAccess");
 
   apiKeyValueHashIndex = "ApiKeyValueHashIndex";
   apiKeyTableName = "ApiKeyTable";
@@ -215,6 +216,7 @@ export class LlmGatewayStack extends cdk.Stack {
     apiKeyValueHashIndex: string,
     secret: secretsmanager.Secret,
     defaultQuotaParameter: ssm.StringParameter,
+    defaultModelAccessParameter: ssm.StringParameter,
     assumedBy: iam.ServicePrincipal
   ) {
     const resourceArn = null;
@@ -268,6 +270,11 @@ export class LlmGatewayStack extends cdk.Stack {
             new iam.PolicyStatement({
               actions: ['ssm:GetParameter'],
               resources: [defaultQuotaParameter.parameterArn],
+              effect: iam.Effect.ALLOW
+            }),
+            new iam.PolicyStatement({
+              actions: ['ssm:GetParameter'],
+              resources: [defaultModelAccessParameter.parameterArn],
               effect: iam.Effect.ALLOW
             })
           ],
@@ -425,6 +432,19 @@ export class LlmGatewayStack extends cdk.Stack {
       tier: ssm.ParameterTier.STANDARD
     });
 
+    let parameterValueDefaultModelAccess = {
+      "default_model_access": this.defaultModelAccess
+    }
+    const parameterValueDefaultModelAccessString = JSON.stringify(parameterValueDefaultModelAccess);
+
+    // Store the serialized map in SSM Parameter Store
+    const defaultModelAccessParameter = new ssm.StringParameter(this, 'DefaultModelAccessParameter', {
+      parameterName: 'defaultModelAccess',
+      stringValue: parameterValueDefaultModelAccessString,
+      description: 'This parameter stores the default model access for users',
+      tier: ssm.ParameterTier.STANDARD
+    });
+
     const quotaTable = this.createSecureDdbTableWithSortKey(
       this.quotaTableName,
       this.quotaTablePartitionKey,
@@ -473,7 +493,8 @@ export class LlmGatewayStack extends cdk.Stack {
       USER_POOL_ID: this.userPool.userPoolId,
       APP_CLIENT_ID: this.applicationLoadBalanceruserPoolClient.userPoolClientId,
       QUOTA_TABLE_NAME: quotaTable.tableName,
-      DEFAULT_QUOTA_PARAMETER_NAME: defaultQuotaParameter.parameterName
+      DEFAULT_QUOTA_PARAMETER_NAME: defaultQuotaParameter.parameterName,
+      DEFAULT_MODEL_ACCESS_PARAMETER_NAME: defaultModelAccessParameter.parameterName
     }
 
     // Create a Security Group for the private ALB that only allows traffic from within the VPC
@@ -497,6 +518,7 @@ export class LlmGatewayStack extends cdk.Stack {
         this.apiKeyValueHashIndex,
         saltSecret,
         defaultQuotaParameter,
+        defaultModelAccessParameter,
         new iam.ServicePrincipal("lambda.amazonaws.com")
       )
       const fn = new lambda.DockerImageFunction(this, "llmGatewayLambda", {
@@ -543,6 +565,7 @@ export class LlmGatewayStack extends cdk.Stack {
         this.apiKeyValueHashIndex,
         saltSecret,
         defaultQuotaParameter,
+        defaultModelAccessParameter,
         new iam.ServicePrincipal('ecs-tasks.amazonaws.com')
       )
       ecsExecutionRole.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonECSTaskExecutionRolePolicy'));
