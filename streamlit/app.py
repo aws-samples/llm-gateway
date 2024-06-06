@@ -10,6 +10,8 @@ from streamlit.web.server.websocket_headers import _get_websocket_headers
 import jwt
 from invoke_llm_with_streaming import llm_answer_streaming
 from invoke_llm_with_streaming import thread_safe_session_state
+import os
+import requests
 
 st.set_page_config(layout="wide")
 float_init(theme=True, include_unstable_primary=False)
@@ -23,6 +25,7 @@ if "estimated_usage" not in st.session_state:
 
 quota_limit = 0.1000
 is_streaming = False
+QuotaURL = os.environ["QuotaURL"] + "quota" + "/currentusersummary"
 
 ################################################################################
 # BEGIN - Lambda code - This needs to be migrated to the cloud
@@ -159,12 +162,38 @@ def estimate_cost(
 # END - Lambda code
 ################################################################################
 
+def fetch_quota_summary():
+    access_token = process_access_token()
+    if access_token:
+        headers = {
+            "Authorization": f"Bearer {access_token}"
+        }
+        
+        response = requests.get(QuotaURL, headers=headers)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            st.error('Failed to retrieve data: HTTP status code ' + str(response.status_code))
+            return None
+    else:
+        st.error('Access token not available.')
+        return None
+
 metrics = {
     "n_input_tokens": 0,
     "n_output_tokens": 0,
     "input_cost": 0,
     "output_cost": 0,
 }
+
+def format_two_significant_figures(num_str):
+    num = float(num_str)
+    return f"{num:.2g}"
+
+
+quota_summary = fetch_quota_summary()[0]
+metrics["total_estimated_cost"] = format_two_significant_figures(quota_summary['total_estimated_cost'])
+metrics["limit"] = quota_summary['limit']
 
 
 def bridge(async_gen, sync_queue):
@@ -202,6 +231,9 @@ def update_metrics(s, type_):
     else:
         metrics[f"{type_}_cost"] = 0
         metrics[f"n_{type_}_tokens"] = 0
+    quota_summary = fetch_quota_summary()[0]
+    metrics["total_estimated_cost"] = format_two_significant_figures(quota_summary['total_estimated_cost'])
+    metrics["limit"] = quota_summary['limit']
     print(metrics)
 
 
@@ -385,6 +417,7 @@ with right_column:
     - Model Selected: {st.session_state.model_selection}
     - Model Id: {st.session_state.model_id}
     - User: {username}
+    - Estimated usage for this period: \$ {metrics["total_estimated_cost"]} / \$ {metrics["limit"]}
     - ChatId: {thread_safe_session_state.get("chat_id")}
     """)
 
