@@ -694,6 +694,27 @@ export class LlmGatewayStack extends cdk.Stack {
   }
 
   createQuotaHandlerApi(api: apigw.RestApi, quotaTable: dynamodb.ITable, vpcParams: object, quotaHandlerEcr: ecr.IRepository, defaultQuotaParameter:ssm.StringParameter) {
+    const quotaAuthHandlerRole = new iam.Role(this, "QuotaAuthHandlerRole", {
+      assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
+      roleName: "QuotaAuthHandlerRole",
+      inlinePolicies: {
+        LambdaPermissions: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              sid: "WriteToCloudWatchLogs",
+              effect: iam.Effect.ALLOW,
+              actions: [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents",
+              ],
+              resources: ["*"],
+            }),
+          ],
+        }),
+      },
+    })
+    
     const authHandler = new lambdaNode.NodejsFunction(this, "AuthHandlerFunctionQuota", {
       runtime: lambda.Runtime.NODEJS_20_X,
       entry: path.join(__dirname, "authorizer/index.ts"),
@@ -709,26 +730,23 @@ export class LlmGatewayStack extends cdk.Stack {
       bundling: {
         minify: false,
       },
-      role: new iam.Role(this, "QuotaAuthHandlerRole", {
-        assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
-        roleName: "QuotaAuthHandlerRole",
-        inlinePolicies: {
-          LambdaPermissions: new iam.PolicyDocument({
-            statements: [
-              new iam.PolicyStatement({
-                sid: "WriteToCloudWatchLogs",
-                effect: iam.Effect.ALLOW,
-                actions: [
-                  "logs:CreateLogGroup",
-                  "logs:CreateLogStream",
-                  "logs:PutLogEvents",
-                ],
-                resources: ["*"],
-              }),
-            ],
-          }),
-        },
-      })
+      role: quotaAuthHandlerRole
+    });
+
+    const authHandlerNonAdmin = new lambdaNode.NodejsFunction(this, "AuthHandlerFunctionNonAdminQuota", {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      entry: path.join(__dirname, "authorizer/index.ts"),
+      architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
+      environment: {
+        USER_POOL_ID: this.userPool.userPoolId,
+        APP_CLIENT_ID: this.applicationLoadBalanceruserPoolClient.userPoolClientId,
+        COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix,
+        REGION: this.regionValue
+      },
+      bundling: {
+        minify: false,
+      },
+      role: quotaAuthHandlerRole
     });
 
     const quotaAuthorizerGet = new apigw.TokenAuthorizer(this,
@@ -743,6 +761,14 @@ export class LlmGatewayStack extends cdk.Stack {
       "QuotaAuthorizerGetSummary",
       {
         handler: authHandler,
+        identitySource: "method.request.header.Authorization",
+      },
+    )
+
+    const quotaAuthorizerGetSummaryNonAdmin = new apigw.TokenAuthorizer(this,
+      "QuotaAuthorizerGetSummaryNonAdmin",
+      {
+        handler: authHandlerNonAdmin,
         identitySource: "method.request.header.Authorization",
       },
     )
@@ -771,7 +797,8 @@ export class LlmGatewayStack extends cdk.Stack {
       environment: {
         REGION: this.regionValue,
         QUOTA_TABLE_NAME: quotaTable.tableName,
-        DEFAULT_QUOTA_PARAMETER_NAME: defaultQuotaParameter.parameterName
+        DEFAULT_QUOTA_PARAMETER_NAME: defaultQuotaParameter.parameterName,
+        COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix
       },
       timeout: cdk.Duration.minutes(15),
       memorySize: 512,
@@ -788,9 +815,17 @@ export class LlmGatewayStack extends cdk.Stack {
     // Add a new resource for the summary under quota
     const summaryResource = quotaResource.addResource('summary');
 
+    // Add a new resource for the summary under quota
+    const currentusersummaryResource = quotaResource.addResource('currentusersummary');
+
     // Add GET method for the /quota/summary endpoint
     summaryResource.addMethod('GET', new apigw.LambdaIntegration(quotaHandler), {
         authorizer: quotaAuthorizerGetSummary
+    });
+
+    // Add GET method for the /quota/currentusersummary endpoint
+    currentusersummaryResource.addMethod('GET', new apigw.LambdaIntegration(quotaHandler), {
+      authorizer: quotaAuthorizerGetSummaryNonAdmin
     });
 
     // Add POST endpoint
