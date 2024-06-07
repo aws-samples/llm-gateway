@@ -16,9 +16,6 @@ def process_access_token():
     print(f'returning {access_token}')
     return access_token
 
-def get_current_timestamp():
-    return (datetime.now()).timestamp()
-
 def fetch_model_access_config(username):
     access_token = process_access_token()
     if access_token:

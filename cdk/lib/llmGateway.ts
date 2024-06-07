@@ -78,6 +78,7 @@ export class LlmGatewayStack extends cdk.Stack {
   adminList = this.node.tryGetContext("adminList");
   defaultModelAccess = this.node.tryGetContext("defaultModelAccess");
   modelAccessRepoName = this.node.tryGetContext("modelAccessRepoName");
+  debug = this.node.tryGetContext("debug");
 
   apiKeyValueHashIndex = "ApiKeyValueHashIndex";
   apiKeyTableName = "ApiKeyTable";
@@ -92,6 +93,9 @@ export class LlmGatewayStack extends cdk.Stack {
   modelAccessTableName = "ModelAccessTable";
   modelAccessTablePartitionKey = "username";
   modelAccessHandlerFunctionName = "modelAccessHandlerFunciton";
+  requestDetailsTableName = "RequestDetailsTable";
+  requestDetailsTablePartitionKey = "username";
+  requestDetailsTableSortKey = "timestamp";
 
   userPool: cognito.IUserPool;
   applicationLoadBalanceruserPoolClient: cognito.IUserPoolClient;
@@ -217,6 +221,7 @@ export class LlmGatewayStack extends cdk.Stack {
     chatHistoryTable: dynamodb.Table,
     quotaTable: dynamodb.Table,
     modelAccessTable: dynamodb.Table,
+    requestDetailsTable: dynamodb.Table,
     apiKeyTable: dynamodb.Table,
     apiKeyValueHashIndex: string,
     secret: secretsmanager.Secret,
@@ -252,7 +257,7 @@ export class LlmGatewayStack extends cdk.Stack {
                 "dynamodb:Scan",
                 "dynamodb:UpdateItem",
               ],
-              resources: [chatHistoryTable.tableArn, apiKeyTable.tableArn, `${apiKeyTable.tableArn}/index/${apiKeyValueHashIndex}`, quotaTable.tableArn, modelAccessTable.tableArn],
+              resources: [chatHistoryTable.tableArn, apiKeyTable.tableArn, `${apiKeyTable.tableArn}/index/${apiKeyValueHashIndex}`, quotaTable.tableArn, modelAccessTable.tableArn, requestDetailsTable.tableArn],
             }),
             new iam.PolicyStatement({
               effect: iam.Effect.ALLOW,
@@ -510,6 +515,14 @@ export class LlmGatewayStack extends cdk.Stack {
       null
     )
 
+    const requestDetailsTable = this.createSecureDdbTableWithSortKey(
+      this.requestDetailsTableName,
+      this.requestDetailsTablePartitionKey,
+      this.requestDetailsTableSortKey,
+      null,
+      null
+    )
+
     const saltSecret = this.createSaltSecret()
 
     const apiKeyTable = this.createSecureDdbTableWithSortKey(
@@ -552,7 +565,9 @@ export class LlmGatewayStack extends cdk.Stack {
       QUOTA_TABLE_NAME: quotaTable.tableName,
       MODEL_ACCESS_TABLE_NAME: modelAccessTable.tableName,
       DEFAULT_QUOTA_PARAMETER_NAME: defaultQuotaParameter.parameterName,
-      DEFAULT_MODEL_ACCESS_PARAMETER_NAME: defaultModelAccessParameter.parameterName
+      DEFAULT_MODEL_ACCESS_PARAMETER_NAME: defaultModelAccessParameter.parameterName,
+      REQUEST_DETAILS_TABLE_NAME: requestDetailsTable.tableName,
+      DEBUG: this.debug
     }
 
     // Create a Security Group for the private ALB that only allows traffic from within the VPC
@@ -573,6 +588,7 @@ export class LlmGatewayStack extends cdk.Stack {
         chatHistoryTable,
         quotaTable,
         modelAccessTable,
+        requestDetailsTable,
         apiKeyTable,
         this.apiKeyValueHashIndex,
         saltSecret,
@@ -621,6 +637,7 @@ export class LlmGatewayStack extends cdk.Stack {
         chatHistoryTable,
         quotaTable,
         modelAccessTable,
+        requestDetailsTable,
         apiKeyTable,
         this.apiKeyValueHashIndex,
         saltSecret,

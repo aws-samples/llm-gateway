@@ -135,6 +135,7 @@ cdk deploy "$STACK_NAME" \
 --context salt=$SALT \
 --context defaultModelAccess=$DEFAULT_MODEL_ACCESS \
 --context modelAccessRepoName=$ECR_MODEL_ACCESS_REPOSITORY \
+--context debug=$DEBUG \
 --outputs-file ./outputs.json
 
 # Check if the deployment was successful

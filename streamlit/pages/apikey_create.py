@@ -17,13 +17,13 @@ def process_access_token():
 # Calculate expiration timestamp based on selection
 def calculate_expiration(duration):
     if duration == "1 minute":
-        return (datetime.now() + timedelta(minutes=1)).timestamp()
+        return (datetime.now(datetime.timezone.utc) + timedelta(minutes=1)).timestamp()
     elif duration == '1 month':
-        return (datetime.now() + timedelta(days=30)).timestamp()
+        return (datetime.now(datetime.timezone.utc) + timedelta(days=30)).timestamp()
     elif duration == '6 months':
-        return (datetime.now() + timedelta(days=180)).timestamp()
+        return (datetime.now(datetime.timezone.utc) + timedelta(days=180)).timestamp()
     elif duration == '1 year':
-        return (datetime.now() + timedelta(days=365)).timestamp()
+        return (datetime.now(datetime.timezone.utc) + timedelta(days=365)).timestamp()
     else:
         return None
 
