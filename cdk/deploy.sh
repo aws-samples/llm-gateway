@@ -58,6 +58,12 @@ cd ../lambdas/quota
 #navigate back to the original directory
 cd -
 
+cd ../lambdas/model_access
+./build_and_deploy.sh $ECR_MODEL_ACCESS_REPOSITORY
+
+#navigate back to the original directory
+cd -
+
 echo $UI_CERT_ARN
 echo $UI_DOMAIN_NAME
 echo $ECR_STREAMLIT_REPOSITORY
@@ -80,6 +86,8 @@ echo $DEFAULT_QUOTA_FREQUENCY
 echo $DEFAULT_QUOTA_DOLLARS
 echo $ECR_QUOTA_REPOSITORY
 echo $ADMIN_LIST
+echo $DEFAULT_MODEL_ACCESS
+echo $ECR_MODEL_ACCESS_REPOSITORY
 cd ../streamlit
 ./build_and_deploy.sh $ECR_STREAMLIT_REPOSITORY
 
@@ -125,6 +133,8 @@ cdk deploy "$STACK_NAME" \
 --context quotaRepoName=$ECR_QUOTA_REPOSITORY \
 --context adminList=$ADMIN_LIST \
 --context salt=$SALT \
+--context defaultModelAccess=$DEFAULT_MODEL_ACCESS \
+--context modelAccessRepoName=$ECR_MODEL_ACCESS_REPOSITORY \
 --outputs-file ./outputs.json
 
 # Check if the deployment was successful
@@ -138,6 +148,7 @@ if [ $? -eq 0 ]; then
     LLM_GATEWAY_LAMBDA_FUNCTION=$(jq -r ".\"${STACK_NAME}\".LlmgatewayLambdaFunctionName" ./outputs.json)
     LLM_GATEWAY_ECS_TASK=$(jq -r ".\"${STACK_NAME}\".LlmgatewayEcsTask" ./outputs.json)
     QUOTA_LAMBDA_FUNCTION_NAME=$(jq -r ".\"${STACK_NAME}\".QuotaLambdaFunctionName" ./outputs.json)
+    MODEL_ACCESS_LAMBDA_FUNCTION_NAME=$(jq -r ".\"${STACK_NAME}\".ModelAccessLambdaFunctionName" ./outputs.json)
 
     # Write outputs to a file with modified keys and format
     echo "UserPoolID=$USER_POOL_ID" > resources.txt
@@ -164,6 +175,11 @@ if [ $? -eq 0 ]; then
     aws lambda update-function-code \
         --function-name $QUOTA_LAMBDA_FUNCTION_NAME \
         --image-uri $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_QUOTA_REPOSITORY:latest \
+        --region $AWS_REGION
+
+    aws lambda update-function-code \
+        --function-name $MODEL_ACCESS_LAMBDA_FUNCTION_NAME \
+        --image-uri $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_MODEL_ACCESS_REPOSITORY:latest \
         --region $AWS_REGION
 
     aws ecs update-service \

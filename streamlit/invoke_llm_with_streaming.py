@@ -16,8 +16,8 @@ import openai
 load_dotenv()
 
 
-ApiUrl = os.environ["ApiUrl"]
-print(f'ApiUrl: {ApiUrl}')
+LlmGatewayUrl = os.environ["LlmGatewayUrl"]
+print(f'LlmGatewayUrl: {LlmGatewayUrl}')
 
 class ThreadSafeSessionState:
     def __init__(self):
@@ -38,7 +38,7 @@ class ThreadSafeSessionState:
 thread_safe_session_state = ThreadSafeSessionState()
 
 async def llm_answer_streaming(question, model, access_token):
-    client = openai.AsyncOpenAI(base_url=ApiUrl, api_key=access_token)
+    client = openai.AsyncOpenAI(base_url=LlmGatewayUrl, api_key=access_token)
 
     if thread_safe_session_state.get("chat_id"):
         chat_id = thread_safe_session_state.get("chat_id")
