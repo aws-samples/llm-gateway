@@ -6,7 +6,7 @@ import json
 import time
 from datetime import datetime, timedelta
 
-ApiKeyURL = os.environ["ApiKeyURL"] + "apikey"
+ApiKeyURL = os.environ["ApiGatewayURL"] + "apikey"
 
 def process_access_token():
     headers = _get_websocket_headers()

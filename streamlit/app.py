@@ -25,7 +25,8 @@ if "estimated_usage" not in st.session_state:
 
 quota_limit = 0.1000
 is_streaming = False
-QuotaURL = os.environ["QuotaURL"] + "quota" + "/currentusersummary"
+QuotaURL = os.environ["ApiGatewayURL"] + "quota" + "/currentusersummary"
+ModelAccessURL = os.environ["ApiGatewayModelAccessURL"] + "modelaccess" + "/currentusersummary"
 
 ################################################################################
 # BEGIN - Lambda code - This needs to be migrated to the cloud
@@ -179,6 +180,23 @@ def fetch_quota_summary():
         st.error('Access token not available.')
         return None
 
+def fetch_model_access():
+    access_token = process_access_token()
+    if access_token:
+        headers = {
+            "Authorization": f"Bearer {access_token}"
+        }
+        
+        response = requests.get(ModelAccessURL, headers=headers)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            st.error('Failed to retrieve data: HTTP status code ' + str(response.status_code))
+            return None
+    else:
+        st.error('Access token not available.')
+        return None
+
 metrics = {
     "n_input_tokens": 0,
     "n_output_tokens": 0,
@@ -242,6 +260,10 @@ main_column, right_column = st.columns([3, 1])
 if "is_responding" not in st.session_state:
     st.session_state.is_responding = False
 
+if "model_access" not in st.session_state:
+    model_access = fetch_model_access()
+    print(f'model_access: {model_access}')
+    st.session_state.model_access = model_access['model_access_list']
 
 def chat_content():
     # append the prompt and the role (user) as a message to the session state
@@ -418,7 +440,7 @@ with right_column:
     - Model Id: {st.session_state.model_id}
     - User: {username}
     - Estimated usage for this period: \$ {metrics["total_estimated_cost"]} / \$ {metrics["limit"]}
-    - ChatId: {thread_safe_session_state.get("chat_id")}
+    - Model Access: {st.session_state.model_access}
     """)
 
     n_input_tokens = metrics["n_input_tokens"]

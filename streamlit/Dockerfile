@@ -20,6 +20,9 @@ COPY pages/apikey_get.py /app/pages/
 COPY pages/quota_create.py /app/pages/
 COPY pages/quota_status.py /app/pages/
 COPY pages/quota_management.py /app/pages/
+COPY pages/model_access_create.py /app/pages/
+COPY pages/model_access_management.py /app/pages/
+COPY pages/model_access_status.py /app/pages/
 
 # Copy the Streamlit configuration file
 COPY config.toml /home/streamlit/.streamlit/
@@ -27,4 +30,3 @@ COPY config.toml /home/streamlit/.streamlit/
 USER streamlit
 HEALTHCHECK --interval=30s --timeout=5s CMD curl -f http://localhost:8501/healthz || exit 1
 CMD ["/usr/bin/streamlit", "run", "app.py"]
-

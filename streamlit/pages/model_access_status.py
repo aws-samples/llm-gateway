@@ -4,7 +4,7 @@ import requests
 import os
 from datetime import datetime, timedelta
 
-QuotaURL = os.environ["ApiGatewayURL"] + "quota" + "/summary"
+ModelAccessURL = os.environ["ApiGatewayModelAccessURL"] + "modelaccess/summary"
 
 def process_access_token():
     headers = _get_websocket_headers()
@@ -19,7 +19,7 @@ def process_access_token():
 def get_current_timestamp():
     return (datetime.now()).timestamp()
 
-def fetch_quota_summary(username):
+def fetch_model_access_config(username):
     access_token = process_access_token()
     if access_token:
         headers = {
@@ -28,7 +28,7 @@ def fetch_quota_summary(username):
         params = {
             "username": username
         }
-        response = requests.get(QuotaURL, headers=headers, params=params)
+        response = requests.get(ModelAccessURL, headers=headers, params=params)
         if response.status_code == 200:
             return response.json()
         else:
@@ -37,11 +37,6 @@ def fetch_quota_summary(username):
     else:
         st.error('Access token not available.')
         return None
-
-def get_quota_status(total_estimated_cost, limit):
-    if float(total_estimated_cost) > float(limit):
-        return "Quota exceeded"
-    return "Within Quota Limits"
 
 # Input for username
 username = st.text_input("Enter a username:")
@@ -52,31 +47,20 @@ submitted = st.button("Submit")
 # Check if the button was pressed and the username field is not empty
 if submitted:
     if username:
-        st.session_state.quotas = fetch_quota_summary(username)
+        st.session_state.model_access_config = fetch_model_access_config(username)
     else:
         st.error("Please enter a username before submitting.")
 
 # Display and manage API keys
-if 'quotas' in st.session_state and st.session_state.quotas:
+if 'model_access_config' in st.session_state and st.session_state.model_access_config:
     # Define column headers outside the loop
-    col1, col2, col3, col4, col5 = st.columns([3, 1, 1, 1, 1])
+    col1, col2 = st.columns([3, 3])
     col1.markdown("**Username**")
-    col2.markdown("**Quota Frequency**")
-    col3.markdown("**Quota Used**")
-    col4.markdown("**Quota Limit**")
-    col5.markdown("**Quota Status**")
-
-    for item in list(st.session_state.quotas):
-        col1, col2, col3, col4, col5 = st.columns([3, 1, 1, 1, 1])
-        col1.write(f"{item['username']}")
-
-        total_estimated_cost = item['total_estimated_cost']
-        limit = item['limit']
-
-        col2.write(item['frequency'])
-        col3.write(total_estimated_cost)
-        col4.write(limit)
-        col5.write(get_quota_status(total_estimated_cost, limit))
+    col2.markdown("**Model Access List**")
+    col1, col2 = st.columns([3, 3])
+    for key, value in st.session_state.model_access_config.items():
+        col1.write(username)
+        col2.write(value)
 
 else:
-    st.write("No Quotas to display.")
+    st.write("No Model Access config to display.")

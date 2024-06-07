@@ -4,7 +4,7 @@ import requests
 import os
 from datetime import datetime, timedelta
 
-QuotaURL = os.environ["QuotaURL"] + "quota"
+QuotaURL = os.environ["ApiGatewayURL"] + "quota"
 
 def process_access_token():
     headers = _get_websocket_headers()

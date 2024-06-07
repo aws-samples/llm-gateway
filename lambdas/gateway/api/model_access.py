@@ -11,10 +11,12 @@ import decimal
 
 DEFAULT_MODEL_ACCESS_PARAMETER_NAME = os.environ.get("DEFAULT_MODEL_ACCESS_PARAMETER_NAME")
 REGION = os.environ.get("REGION")
-
+MODEL_ACCESS_TABLE_NAME = os.environ.get("MODEL_ACCESS_TABLE_NAME")
 ssm_client = boto3.client("ssm")
 
 cache = TTLCache(maxsize=5000, ttl=60)
+dynamodb = boto3.resource('dynamodb')
+model_access_table = dynamodb.Table(MODEL_ACCESS_TABLE_NAME)
 
 def check_model_access(user_name, model_id):
     print('Checking if user has has access to model')
@@ -40,7 +42,7 @@ def check_model_access(user_name, model_id):
     else:
         print(f'Found cached model access config: {model_access_config}')
     
-    allowed_models_list = model_access_config["default_model_access"].split(",")
+    allowed_models_list = model_access_config["model_access_list"].split(",")
     print(f'model_id: {model_id} allowed_models_list: {allowed_models_list}')
     if model_id not in allowed_models_list:
         raise HTTPException(
@@ -50,7 +52,15 @@ def check_model_access(user_name, model_id):
 
 
 def get_user_model_access_config(user_name):
-    return None
+    response = model_access_table.query(
+        KeyConditionExpression=Key('username').eq(user_name)
+    )
+    print(f'response: {response}')
+    print(f'response: {response["Items"]}')
+    if not response["Items"]:
+        return None
+
+    return response["Items"][0]["model_access_map"]
 
 def add_to_cache(key, value):
     cache[key] = value

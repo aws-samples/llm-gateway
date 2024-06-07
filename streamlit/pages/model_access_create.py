@@ -7,7 +7,7 @@ import time
 from datetime import datetime, timedelta
 
 
-QuotaURL = os.environ["ApiGatewayURL"] + "quota"
+ModelAccessURL = os.environ["ApiGatewayModelAccessURL"] + "modelaccess"
 
 def process_access_token():
     headers = _get_websocket_headers()
@@ -17,14 +17,13 @@ def process_access_token():
 
 
 # Form to create a new API key
-with st.form(key='create_api_key_form'):
+with st.form(key='create_model_access_form'):
     username = st.text_input("username")
-    frequency_choice = st.selectbox("Select quota frequency", ["weekly"])
-    quota_limit = st.number_input('Enter the quota limit in dollars:', step=1.0)
+    model_access_list = st.multiselect("Select models to give access to", ["anthropic.claude-3-sonnet-20240229-v1:0","anthropic.claude-3-haiku-20240307-v1:0","meta.llama3-70b-instruct-v1:0","amazon.titan-text-express-v1","mistral.mixtral-8x7b-instruct-v0:1"])
 
     submit_button = st.form_submit_button(label='Create')
 
-    if submit_button and username and frequency_choice and quota_limit:
+    if submit_button and username and model_access_list:
         access_token_post = process_access_token()
         if access_token_post:
             headers_post = {
@@ -32,24 +31,24 @@ with st.form(key='create_api_key_form'):
                 "Content-Type": "application/json",
                 "Accept": "application/json"
             }
-            body = {frequency_choice: quota_limit}
+            body = {'model_access_list': ','.join(model_access_list)}
             
             params = {
                 "username": username
             }
 
-            post_response = requests.post(QuotaURL, headers=headers_post, data=json.dumps(body), params=params)
+            post_response = requests.post(ModelAccessURL, headers=headers_post, data=json.dumps(body), params=params)
 
             if post_response.status_code == 200:
-                quota_map = post_response.json().get("quota_map", "")
+                model_access_map = post_response.json().get("model_access_map", "")
                 username = post_response.json().get("username", "")
-                st.success(f'Quota created successfully! This is your configured quota for {username}')
-                st.code(quota_map, language='plaintext')
+                st.success(f'Model access configured successfully! This is your configured model access for {username}')
+                st.code(model_access_map, language='plaintext')
             else:
                 response_json = post_response.json()
                 message = response_json.get("message")
-                st.error('Failed to create Quota: HTTP status code ' + str(post_response.status_code) + ' Error: ' + str(message))
+                st.error('Failed to configure model access: HTTP status code ' + str(post_response.status_code) + ' Error: ' + str(message))
         else:
             st.error('Authorization failed. No access token available.')
     elif submit_button:
-        st.error('Please enter a valid username, quota frequency, and quota limit.')
+        st.error('Please enter a valid username, and model access.')
