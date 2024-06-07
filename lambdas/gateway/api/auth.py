@@ -118,6 +118,11 @@ def get_user_name_api_key(authorization_header):
     api_key_document = query_by_api_key_hash(hashed_api_key_value)
     return api_key_document.get('username')
 
+def get_api_key_name(api_key):
+    hashed_api_key_value = hash_api_key(api_key)
+    api_key_document = query_by_api_key_hash(hashed_api_key_value)
+    return api_key_document.get('api_key_name')
+
 def get_user_info_cognito(authorization_header):
     url = f'https://{COGNITO_DOMAIN_PREFIX}.auth.{REGION}.amazoncognito.com/oauth2/userInfo'
 

@@ -42,9 +42,6 @@ def get_salt():
 SALT = get_salt()
 print(f'SALT: {SALT}')
 
-def now():
-    return datetime.datetime.now()
-
 class Settings:
     def __init__(self, event, session):
         self.dynamodb_client = boto3.client("dynamodb")

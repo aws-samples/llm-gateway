@@ -17,7 +17,7 @@ def process_access_token():
     return access_token
 
 def get_current_timestamp():
-    return (datetime.now()).timestamp()
+    return (datetime.now(datetime.timezone.utc)).timestamp()
 
 def is_expired(item):
     if 'expiration_timestamp' in item and item['expiration_timestamp']:

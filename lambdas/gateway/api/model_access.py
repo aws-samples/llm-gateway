@@ -8,6 +8,7 @@ import json
 import pandas as pd
 from botocore.exceptions import ClientError
 import decimal
+from api.request_details import create_request_detail
 
 DEFAULT_MODEL_ACCESS_PARAMETER_NAME = os.environ.get("DEFAULT_MODEL_ACCESS_PARAMETER_NAME")
 REGION = os.environ.get("REGION")
@@ -18,7 +19,7 @@ cache = TTLCache(maxsize=5000, ttl=60)
 dynamodb = boto3.resource('dynamodb')
 model_access_table = dynamodb.Table(MODEL_ACCESS_TABLE_NAME)
 
-def check_model_access(user_name, model_id):
+def check_model_access(user_name, api_key_name, model_id):
     print('Checking if user has has access to model')
     model_access_config = get_from_cache(user_name)
 
@@ -45,6 +46,7 @@ def check_model_access(user_name, model_id):
     allowed_models_list = model_access_config["model_access_list"].split(",")
     print(f'model_id: {model_id} allowed_models_list: {allowed_models_list}')
     if model_id not in allowed_models_list:
+        create_request_detail(user_name, api_key_name, None, None, None, model_id, "Model Access Denied")
         raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN, detail=f"User does not have access to selected model"
                     )

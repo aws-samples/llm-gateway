@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Body
 from fastapi.responses import StreamingResponse
 
-from api.auth import api_key_auth
+from api.auth import api_key_auth, get_api_key_name
 from api.models import get_model
 from api.schema import ChatRequest, ChatResponse, ChatStreamResponse
 from api.setting import DEFAULT_MODEL
@@ -39,7 +39,11 @@ async def chat_completions(
         credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)]
 ):
     user_name = api_key_auth(credentials)
-    check_model_access(user_name, chat_request.model)
+    api_key_name = None
+    if credentials.credentials.startswith("sk-"):
+        api_key_name = get_api_key_name(credentials.credentials)
+
+    check_model_access(user_name, api_key_name, chat_request.model)
     check_quota(user_name)
 
     if chat_request.model.lower().startswith("gpt-"):
@@ -49,6 +53,6 @@ async def chat_completions(
     model = get_model(chat_request.model)
     if chat_request.stream:
         return StreamingResponse(
-            content=model.chat_stream(chat_request, user_name), media_type="text/event-stream"
+            content=model.chat_stream(chat_request, user_name, api_key_name), media_type="text/event-stream"
         )
     return model.chat(chat_request)

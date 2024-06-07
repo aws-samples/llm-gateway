@@ -7,6 +7,7 @@ from typing import AsyncIterable, Iterable, Literal
 
 import boto3
 from api.quota import calculate_input_cost, calculate_output_cost, update_quota
+from api.request_details import create_request_detail
 import numpy as np
 import requests
 import tiktoken
@@ -69,7 +70,6 @@ SUPPORTED_BEDROCK_EMBEDDING_MODELS = {
 
 ENCODER = tiktoken.get_encoding("cl100k_base")
 
-
 # https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters.html
 class BedrockModel(BaseChatModel, ABC):
     accept = "application/json"
@@ -107,7 +107,7 @@ class BedrockModel(BaseChatModel, ABC):
         message_id = self.generate_message_id()
         return self.parse_response(chat_request, response, message_id)
 
-    def chat_stream(self, chat_request: ChatRequest, user_name) -> AsyncIterable[bytes]:
+    def chat_stream(self, chat_request: ChatRequest, user_name, api_key_name) -> AsyncIterable[bytes]:
         """Default implementation for Chat Stream API"""
         if DEBUG:
             logger.info("Raw request: " + chat_request.model_dump_json())
@@ -135,7 +135,7 @@ class BedrockModel(BaseChatModel, ABC):
                 total_cost = input_cost + output_cost
                 print(f'total_cost: {total_cost}')
                 update_quota(user_name, total_cost)
-
+                create_request_detail(user_name, api_key_name, total_cost, usage.prompt_tokens, usage.completion_tokens, chat_request.model, "Success")
                 # An empty choices for Usage as per OpenAI doc below:
                 # if you set stream_options: {"include_usage": true}.
                 # an additional chunk will be streamed before the data: [DONE] message.

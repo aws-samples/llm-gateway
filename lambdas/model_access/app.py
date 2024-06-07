@@ -22,9 +22,6 @@ ssm_client = boto3.client("ssm")
 
 REGION = os.environ.get("REGION")
 
-def now():
-    return datetime.datetime.now()
-
 class Settings:
     def __init__(self, event, session):
         self.dynamodb_client = boto3.client("dynamodb")
