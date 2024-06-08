@@ -2,7 +2,6 @@ import streamlit as st
 import asyncio
 import threading
 import queue
-import websockets
 import warnings
 import boto3
 from streamlit_float import *
@@ -15,6 +14,23 @@ import requests
 
 st.set_page_config(layout="wide")
 float_init(theme=True, include_unstable_primary=False)
+
+show_pages(
+    [
+        Section(name="Developer Pages", icon="👨🏻‍💻"),
+        Page("app.py", "Main Chat App"),
+        Page("pages2/apikey_create.py", "Create API Keys"),
+        Page("pages2/apikey_get.py", "Manage API Keys"),
+        Section(name="Admin Pages", icon="👑"),
+        Page("pages2/model_access_create.py", "Create Model Access Config"),
+        Page("pages2/model_access_status.py", "Check Model Access Status"),
+        Page("pages2/model_access_management.py", "Manage Model Access"),
+        Page("pages2/quota_create.py", "Create Quota Config"),
+        Page("pages2/quota_status.py", "Check Quota Status"),
+        Page("pages2/quota_management.py", "Manage Quotas"),
+    ]
+)
+add_indentation()
 
 # Initialize session state.
 if "messages" not in st.session_state:
