@@ -1373,7 +1373,8 @@ export class LlmGatewayStack extends cdk.Stack {
       environment: {
         LlmGatewayUrl: llmGatewayUrl,
         ApiGatewayURL: apiGatewayApi.url,
-        ApiGatewayModelAccessURL: apiGatewayModelAccessApi.url
+        ApiGatewayModelAccessURL: apiGatewayModelAccessApi.url,
+        AdminList: this.adminList
       },
       healthCheck: {
         command: ['CMD-SHELL', 'curl -f http://localhost:8501/healthz || exit 1'],

@@ -5,8 +5,8 @@ import requests
 import json
 import time
 from datetime import datetime, timedelta, timezone
-from st_pages import Page, show_pages, Section, add_indentation
-
+from st_pages import Page, show_pages, Section, add_indentation, hide_pages
+import jwt
 
 show_pages(
     [
@@ -31,6 +31,39 @@ def process_access_token():
     if 'X-Amzn-Oidc-Accesstoken' not in headers:
         return None
     return headers['X-Amzn-Oidc-Accesstoken']
+
+def process_session_token():
+    '''
+    WARNING: We use unsupported features of Streamlit
+             However, this is quite fast and works well with
+             the latest version of Streamlit (1.27)
+             Also, this does not verify the session token's
+             authenticity. It only decodes the token.
+    '''
+    headers = _get_websocket_headers()
+    if not headers or "X-Amzn-Oidc-Data" not in headers:
+        return {}
+    return jwt.decode(
+        headers["X-Amzn-Oidc-Data"], algorithms=["ES256"], options={"verify_signature": False}
+    )
+session_token = process_session_token()
+
+
+no_username_string = "Could not find username. Normal if you are running locally."
+
+if "username" in session_token:
+    if "GitHub_" in session_token["username"] and "preferred_username" in session_token:
+        username = session_token['preferred_username']
+    else:
+        username = session_token["username"]
+else:
+    username = no_username_string
+
+admin_list = os.environ["AdminList"].split(",")
+
+if username not in admin_list and username != no_username_string:
+    print(f'Username {username} is not an admin. Hiding admin pages.')
+    hide_pages(["Admin Pages", "Create Model Access Config", "Manage Model Access", "Create Quota Config", "Check Quota Status", "Manage Quotas"])
 
 # Calculate expiration timestamp based on selection
 def calculate_expiration(duration):
