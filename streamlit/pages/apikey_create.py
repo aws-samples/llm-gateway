@@ -4,7 +4,7 @@ from streamlit.web.server.websocket_headers import _get_websocket_headers
 import requests
 import json
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 ApiKeyURL = os.environ["ApiGatewayURL"] + "apikey"
 
@@ -17,13 +17,13 @@ def process_access_token():
 # Calculate expiration timestamp based on selection
 def calculate_expiration(duration):
     if duration == "1 minute":
-        return (datetime.now(datetime.timezone.utc) + timedelta(minutes=1)).timestamp()
+        return (datetime.now(timezone.utc) + timedelta(minutes=1)).timestamp()
     elif duration == '1 month':
-        return (datetime.now(datetime.timezone.utc) + timedelta(days=30)).timestamp()
+        return (datetime.now(timezone.utc) + timedelta(days=30)).timestamp()
     elif duration == '6 months':
-        return (datetime.now(datetime.timezone.utc) + timedelta(days=180)).timestamp()
+        return (datetime.now(timezone.utc) + timedelta(days=180)).timestamp()
     elif duration == '1 year':
-        return (datetime.now(datetime.timezone.utc) + timedelta(days=365)).timestamp()
+        return (datetime.now(timezone.utc) + timedelta(days=365)).timestamp()
     else:
         return None
 
@@ -46,7 +46,7 @@ with st.form(key='create_api_key_form'):
             if expiration_timestamp:
                 body['expiration_timestamp'] = str(expiration_timestamp)
 
-            post_response = requests.post(ApiKeyURL, headers=headers_post, data=json.dumps(body))
+            post_response = requests.post(ApiKeyURL, headers=headers_post, data=json.dumps(body), timeout=60)
 
             if post_response.status_code == 200:
                 api_key_value = post_response.json().get("api_key_value", "")

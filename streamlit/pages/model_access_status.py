@@ -25,7 +25,7 @@ def fetch_model_access_config(username):
         params = {
             "username": username
         }
-        response = requests.get(ModelAccessURL, headers=headers, params=params)
+        response = requests.get(ModelAccessURL, headers=headers, params=params, timeout=60)
         if response.status_code == 200:
             return response.json()
         else:

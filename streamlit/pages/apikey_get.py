@@ -2,7 +2,7 @@ import streamlit as st
 from streamlit.web.server.websocket_headers import _get_websocket_headers
 import requests
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 ApiKeyURL = os.environ["ApiGatewayURL"] + "apikey"
 
@@ -17,7 +17,7 @@ def process_access_token():
     return access_token
 
 def get_current_timestamp():
-    return (datetime.now(datetime.timezone.utc)).timestamp()
+    return (datetime.now(timezone.utc)).timestamp()
 
 def is_expired(item):
     if 'expiration_timestamp' in item and item['expiration_timestamp']:
@@ -36,7 +36,7 @@ def fetch_api_keys():
         headers = {
             "Authorization": f"Bearer {access_token}"
         }
-        response = requests.get(ApiKeyURL, headers=headers)
+        response = requests.get(ApiKeyURL, headers=headers, timeout=60)
         if response.status_code == 200:
             return response.json()
         else:
@@ -51,7 +51,7 @@ def delete_api_key(item):
     headers = {
                 "Authorization": f"Bearer {access_token}"
             }
-    delete_response = requests.delete(ApiKeyURL, headers=headers, params={'api_key_name': item['api_key_name']})
+    delete_response = requests.delete(ApiKeyURL, headers=headers, params={'api_key_name': item['api_key_name']}, timeout=60)
     if delete_response.status_code == 200:
         # Remove the item from session state
         st.session_state.api_keys.remove(item)

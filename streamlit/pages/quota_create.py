@@ -38,7 +38,7 @@ with st.form(key='create_api_key_form'):
                 "username": username
             }
 
-            post_response = requests.post(QuotaURL, headers=headers_post, data=json.dumps(body), params=params)
+            post_response = requests.post(QuotaURL, headers=headers_post, data=json.dumps(body), params=params, timeout=60)
 
             if post_response.status_code == 200:
                 quota_map = post_response.json().get("quota_map", "")

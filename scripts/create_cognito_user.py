@@ -2,7 +2,7 @@ import boto3
 
 def read_resources(file_path):
     """ Read resources from the file and return UserPoolID and UserPoolClientID """
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', encoding="utf-8") as file:
         content = file.read()
     
     resources = {}
@@ -14,7 +14,7 @@ def read_resources(file_path):
 
 def write_resources(file_path, username, password):
     """ Append the new username and password to the resources file """
-    with open(file_path, 'a') as file:
+    with open(file_path, 'a', encoding="utf-8") as file:
         file.write(f"\nUsername={username}\nPassword={password}")
 
 def create_cognito_user(user_pool_id, client_id, username, password):

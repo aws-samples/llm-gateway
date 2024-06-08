@@ -50,7 +50,7 @@ def get_user_info_cognito(authorization_header):
     }
 
     # Make the HTTP GET request to the User Info endpoint
-    response = requests.get(url, headers=headers)
+    response = requests.get(url, headers=headers, timeout=60)
 
     # Check if the request was successful
     if response.status_code == 200:

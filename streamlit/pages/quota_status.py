@@ -25,7 +25,7 @@ def fetch_quota_summary(username):
         params = {
             "username": username
         }
-        response = requests.get(QuotaURL, headers=headers, params=params)
+        response = requests.get(QuotaURL, headers=headers, params=params, timeout=60)
         if response.status_code == 200:
             return response.json()
         else:

@@ -85,7 +85,7 @@ def estimate_cost(
     key = ",".join([model, region, type_])
 
     if use_cache:  # Skip the DDB step for better cost / time performance
-        with open(COST_DB) as f:
+        with open(COST_DB, encoding="utf-8") as f:
             reader = csv.DictReader(f)
             costs_dict = {}
             for row in reader:

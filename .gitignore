@@ -2,7 +2,6 @@
 .ipynb*
 .creds/**
 .DS_Store
-package-lock.json
 node_modules
 cdk.context.json
 .idea

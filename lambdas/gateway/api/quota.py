@@ -8,6 +8,7 @@ import json
 import pandas as pd
 from botocore.exceptions import ClientError
 import decimal
+from datetime import datetime, timezone, date, timedelta
 
 DEFAULT_QUOTA_PARAMETER_NAME = os.environ.get("DEFAULT_QUOTA_PARAMETER_NAME")
 QUOTA_TABLE_NAME = os.environ.get("QUOTA_TABLE_NAME")
@@ -112,7 +113,7 @@ def create_requests_summary(requests_summary):
             raise
 
 def get_current_timestamp():
-    return datetime.datetime.now(datetime.timezone.utc).isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 def update_requests_summary(requests_summary, quota_config, user_name):
     last_known_update_time = requests_summary["last_updated_time"]
@@ -149,8 +150,8 @@ def update_requests_summary(requests_summary, quota_config, user_name):
 
 def get_current_time_period(frequency):
     if frequency == "weekly":
-        today = datetime.date.today()
-        start_of_week = today - datetime.timedelta(days=today.weekday())
+        today = date.today()
+        start_of_week = today - timedelta(days=today.weekday())
         date_str = f"{start_of_week.year}-{start_of_week.month}-{start_of_week.day}"
         return date_str
     else:
