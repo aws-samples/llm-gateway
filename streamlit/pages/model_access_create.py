@@ -37,7 +37,7 @@ with st.form(key='create_model_access_form'):
                 "username": username
             }
 
-            post_response = requests.post(ModelAccessURL, headers=headers_post, data=json.dumps(body), params=params)
+            post_response = requests.post(ModelAccessURL, headers=headers_post, data=json.dumps(body), params=params, timeout=60)
 
             if post_response.status_code == 200:
                 model_access_map = post_response.json().get("model_access_map", "")

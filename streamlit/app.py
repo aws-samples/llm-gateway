@@ -132,7 +132,7 @@ def estimate_cost(
     key = ",".join([model, region, type_])
 
     if use_cache:  # Skip the DDB step for better cost / time performance
-        with open(COST_DB) as f:
+        with open(COST_DB, encoding="utf-8") as f:
             reader = csv.DictReader(f)
             costs_dict = {}
             for row in reader:
@@ -170,7 +170,7 @@ def fetch_quota_summary():
             "Authorization": f"Bearer {access_token}"
         }
         
-        response = requests.get(QuotaURL, headers=headers)
+        response = requests.get(QuotaURL, headers=headers, timeout=60)
         if response.status_code == 200:
             return response.json()
         else:
@@ -187,7 +187,7 @@ def fetch_model_access():
             "Authorization": f"Bearer {access_token}"
         }
         
-        response = requests.get(ModelAccessURL, headers=headers)
+        response = requests.get(ModelAccessURL, headers=headers, timeout=60)
         if response.status_code == 200:
             return response.json()
         else:

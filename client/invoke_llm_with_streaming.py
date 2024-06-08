@@ -30,7 +30,7 @@ Password = None
 
 if os.path.exists(resources_file_path):
     # Open the file and read the contents
-    with open(resources_file_path, 'r') as file:
+    with open(resources_file_path, 'r', encoding="utf-8") as file:
         # Iterate over each line in the file
         for line in file:
             stripped_line = line.strip()
@@ -49,7 +49,7 @@ else:
 
 if os.path.exists(scripts_resources_file_path):
     # Open the file and read the contents
-    with open(scripts_resources_file_path, 'r') as file:
+    with open(scripts_resources_file_path, 'r', encoding="utf-8") as file:
         # Iterate over each line in the file
         for line in file:
             stripped_line = line.strip()

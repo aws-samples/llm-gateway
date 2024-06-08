@@ -11,7 +11,7 @@ def upload_json_to_dynamodb(file_path, table_name):
     # Get a reference to the DynamoDB table
     table = dynamodb.Table(table_name)
 
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', encoding="utf-8") as file:
         data = json.load(file)
         for item in data:
             # Perform the bulk insert

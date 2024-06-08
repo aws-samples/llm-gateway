@@ -542,7 +542,7 @@ Please think if you need to use a tool or not for user's question, you must:
             ]
 
         except Exception as e:
-            logger.error("Failed to parse tool response" + str(e))
+            logger.warning("Failed to parse tool response" + str(e))
             raise HTTPException(status_code=500, detail="Failed to parse tool response")
 
     def _get_base64_image(self, image_url: str) -> tuple[str, str]:
@@ -559,7 +559,7 @@ Please think if you need to use a tool or not for user's question, you must:
             return image_data, content_type.group(1)
 
         # Send a request to the image URL
-        response = requests.get(image_url)
+        response = requests.get(image_url, timeout=60)
         # Check if the request was successful
         if response.status_code == 200:
 

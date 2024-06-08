@@ -25,7 +25,7 @@ def fetch_model_access_config(username):
         params = {
             "username": username
         }
-        response = requests.get(ModelAccessURL, headers=headers, params=params)
+        response = requests.get(ModelAccessURL, headers=headers, params=params, timeout=60)
         if response.status_code == 200:
             return response.json()
         else:
@@ -40,7 +40,7 @@ def delete_model_access_config(username):
     headers = {
                 "Authorization": f"Bearer {access_token}"
             }
-    delete_response = requests.delete(ModelAccessURL, headers=headers, params={'username': username})
+    delete_response = requests.delete(ModelAccessURL, headers=headers, params={'username': username}, timeout=60)
     if delete_response.status_code == 200:
         # Remove the item from session state
         st.session_state.model_access_config = None

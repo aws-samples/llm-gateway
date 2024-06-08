@@ -95,7 +95,7 @@ cd ../streamlit
 cd -
 
 cd lib/authorizer
-npm install
+npm ci
 
 #navigate back to the original directory
 cd -

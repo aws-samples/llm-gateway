@@ -4,7 +4,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 def read_resources(file_path):
     """ Read resources from the file and return UserPoolID and UserPoolClientID """
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', encoding="utf-8") as file:
         content = file.read()
     
     resources = {}

@@ -1,5 +1,5 @@
 FROM public.ecr.aws/docker/library/alpine:edge@sha256:e31c3b1cd47718260e1b6163af0a05b3c428dc01fa410baf72ca8b8076e22e72
-RUN apk update && apk add python3 py3-pip py3-pyarrow curl
+RUN apk update && apk add python3 py3-pip py3-pyarrow curl --no-cache
 RUN addgroup -S streamlit && adduser -S -G streamlit streamlit
 
 # Create the directory for Streamlit configuration
@@ -11,7 +11,7 @@ RUN mkdir /app/pages && chown streamlit:streamlit /app/pages
 
 COPY requirements.txt /app/
 WORKDIR /app
-RUN pip3 install --break-system-packages -r requirements.txt
+RUN pip3 install --break-system-packages -r requirements.txt --no-cache-dir
 COPY app.py /app/
 COPY invoke_llm_with_streaming.py /app/
 COPY data/cost_db.csv /app/data/
