@@ -9,6 +9,7 @@ import pandas as pd
 from botocore.exceptions import ClientError
 import decimal
 from datetime import datetime, timezone, date, timedelta
+from api.request_details import create_request_detail
 
 DEFAULT_QUOTA_PARAMETER_NAME = os.environ.get("DEFAULT_QUOTA_PARAMETER_NAME")
 QUOTA_TABLE_NAME = os.environ.get("QUOTA_TABLE_NAME")
@@ -23,7 +24,7 @@ cache = TTLCache(maxsize=5000, ttl=60)
 cost_df = pd.read_csv('/app/api/data/cost_db.csv', dtype={'cost_per_token': float})
 print(f'cost_df: {cost_df}')
 
-def check_quota(user_name):
+def check_quota(user_name, api_key_name, model_id):
     print('Checking if user has exceeded usage quota')
     quota_config = get_from_cache(user_name)
 
@@ -71,6 +72,7 @@ def check_quota(user_name):
             else:
                 if float(quota_limit_map[frequency]["total_estimate_cost"]) > float(limit):
                     print(f'Quota exceeded. Quota frequency: {frequency}. Total usage: {quota_limit_map[frequency]["total_estimate_cost"]}. Limit: {limit}')
+                    create_request_detail(user_name, api_key_name, None, None, None, model_id, "Quota Exceeded")
                     raise HTTPException(
                         status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=f"Quota exceeded. Quota frequency: {frequency}. Total usage: {quota_limit_map[frequency]["total_estimate_cost"]}. Limit: {limit}"
                     )
