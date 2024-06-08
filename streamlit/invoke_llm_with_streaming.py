@@ -1,15 +1,6 @@
-import boto3
-import json
-import botocore.config
 import os
 from dotenv import load_dotenv
-import streamlit as st
-import websockets
 import threading
-from botocore.auth import SigV4Auth
-from botocore.awsrequest import AWSRequest
-from botocore.session import Session
-from urllib.parse import urlparse, urlunparse
 import openai
 
 # loading in environment variables

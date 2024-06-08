@@ -3,6 +3,23 @@ from streamlit.web.server.websocket_headers import _get_websocket_headers
 import requests
 import os
 from datetime import datetime, timedelta
+from st_pages import Page, show_pages, Section, add_indentation
+
+show_pages(
+    [
+        Section(name="Developer Pages", icon="👨🏻‍💻"),
+        Page("app.py", "Main Chat App"),
+        Page("pages2/apikey_create.py", "Create API Keys"),
+        Page("pages2/apikey_get.py", "Manage API Keys"),
+        Section(name="Admin Pages", icon="👑"),
+        Page("pages2/model_access_create.py", "Create Model Access Config"),
+        Page("pages2/model_access_management.py", "Manage Model Access"),
+        Page("pages2/quota_create.py", "Create Quota Config"),
+        Page("pages2/quota_status.py", "Check Quota Status"),
+        Page("pages2/quota_management.py", "Manage Quotas"),
+    ]
+)
+add_indentation()
 
 QuotaURL = os.environ["ApiGatewayURL"] + "quota" + "/summary"
 

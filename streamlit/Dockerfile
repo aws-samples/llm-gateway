@@ -7,7 +7,7 @@ RUN mkdir -p /home/streamlit/.streamlit && chown -R streamlit:streamlit /home/st
 
 RUN mkdir /app && chown streamlit:streamlit /app
 RUN mkdir /app/data && chown streamlit:streamlit /app/data
-RUN mkdir /app/pages && chown streamlit:streamlit /app/pages
+RUN mkdir /app/pages2 && chown streamlit:streamlit /app/pages2
 
 COPY requirements.txt /app/
 WORKDIR /app
@@ -15,14 +15,13 @@ RUN pip3 install --break-system-packages -r requirements.txt --no-cache-dir
 COPY app.py /app/
 COPY invoke_llm_with_streaming.py /app/
 COPY data/cost_db.csv /app/data/
-COPY pages/apikey_create.py /app/pages/
-COPY pages/apikey_get.py /app/pages/
-COPY pages/quota_create.py /app/pages/
-COPY pages/quota_status.py /app/pages/
-COPY pages/quota_management.py /app/pages/
-COPY pages/model_access_create.py /app/pages/
-COPY pages/model_access_management.py /app/pages/
-COPY pages/model_access_status.py /app/pages/
+COPY pages2/apikey_create.py /app/pages2/
+COPY pages2/apikey_get.py /app/pages2/
+COPY pages2/quota_create.py /app/pages2/
+COPY pages2/quota_status.py /app/pages2/
+COPY pages2/quota_management.py /app/pages2/
+COPY pages2/model_access_create.py /app/pages2/
+COPY pages2/model_access_management.py /app/pages2/
 
 # Copy the Streamlit configuration file
 COPY config.toml /home/streamlit/.streamlit/

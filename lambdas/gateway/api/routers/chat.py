@@ -44,7 +44,7 @@ async def chat_completions(
         api_key_name = get_api_key_name(credentials.credentials)
 
     check_model_access(user_name, api_key_name, chat_request.model)
-    check_quota(user_name)
+    check_quota(user_name, api_key_name, chat_request.model)
 
     if chat_request.model.lower().startswith("gpt-"):
         chat_request.model = DEFAULT_MODEL

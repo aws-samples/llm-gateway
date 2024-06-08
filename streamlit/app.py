@@ -2,7 +2,6 @@ import streamlit as st
 import asyncio
 import threading
 import queue
-import websockets
 import warnings
 import boto3
 from streamlit_float import *
@@ -12,9 +11,26 @@ from invoke_llm_with_streaming import llm_answer_streaming
 from invoke_llm_with_streaming import thread_safe_session_state
 import os
 import requests
+from st_pages import Page, show_pages, Section, add_indentation, hide_pages
 
 st.set_page_config(layout="wide")
 float_init(theme=True, include_unstable_primary=False)
+
+show_pages(
+    [
+        Section(name="Developer Pages", icon="👨🏻‍💻"),
+        Page("app.py", "Main Chat App"),
+        Page("pages2/apikey_create.py", "Create API Keys"),
+        Page("pages2/apikey_get.py", "Manage API Keys"),
+        Section(name="Admin Pages", icon="👑"),
+        Page("pages2/model_access_create.py", "Create Model Access Config"),
+        Page("pages2/model_access_management.py", "Manage Model Access"),
+        Page("pages2/quota_create.py", "Create Quota Config"),
+        Page("pages2/quota_status.py", "Check Quota Status"),
+        Page("pages2/quota_management.py", "Manage Quotas"),
+    ]
+)
+add_indentation()
 
 # Initialize session state.
 if "messages" not in st.session_state:
@@ -26,7 +42,7 @@ if "estimated_usage" not in st.session_state:
 quota_limit = 0.1000
 is_streaming = False
 QuotaURL = os.environ["ApiGatewayURL"] + "quota" + "/currentusersummary"
-ModelAccessURL = os.environ["ApiGatewayModelAccessURL"] + "modelaccess" + "/currentusersummary"
+ModelAccessURL = os.environ["ApiGatewayModelAccessURL"] + "modelaccess" + "/currentuser"
 
 ################################################################################
 # BEGIN - Lambda code - This needs to be migrated to the cloud
@@ -81,14 +97,21 @@ session_token = process_session_token()
 access_token = process_access_token()
 #st.write(f'access_token: {access_token}')
 
+no_username_string = "Could not find username. Normal if you are running locally."
+
 if "username" in session_token:
     if "GitHub_" in session_token["username"] and "preferred_username" in session_token:
         username = session_token['preferred_username']
     else:
         username = session_token["username"]
 else:
-    username = "Could not find username. Normal if you are running locally."
+    username = no_username_string
 
+admin_list = os.environ["AdminList"].split(",")
+
+if username not in admin_list and username != no_username_string:
+    print(f'Username {username} is not an admin. Hiding admin pages.')
+    hide_pages(["Admin Pages", "Create Model Access Config", "Manage Model Access", "Create Quota Config", "Check Quota Status", "Manage Quotas"])
 
 def initialize_model_id():
     st.session_state['model_id'] = "anthropic.claude-3-sonnet-20240229-v1:0"
@@ -191,7 +214,7 @@ def fetch_model_access():
         if response.status_code == 200:
             return response.json()
         else:
-            st.error('Failed to retrieve data: HTTP status code ' + str(response.status_code))
+            st.error('Failed to retrieve data: HTTP status code ' + str(response.status_code) + " " + str(response.json()))
             return None
     else:
         st.error('Access token not available.')
@@ -208,6 +231,9 @@ def format_two_significant_figures(num_str):
     num = float(num_str)
     return f"{num:.2g}"
 
+def format_cost(num_str):
+    num = float(num_str)
+    return f"{num:.8f}"
 
 quota_summary = fetch_quota_summary()[0]
 metrics["total_estimated_cost"] = format_two_significant_figures(quota_summary['total_estimated_cost'])
@@ -265,6 +291,7 @@ if "model_access" not in st.session_state:
     print(f'model_access: {model_access}')
     st.session_state.model_access = model_access['model_access_list']
 
+
 def chat_content():
     # append the prompt and the role (user) as a message to the session state
     if "answer" in st.session_state:
@@ -277,6 +304,13 @@ def chat_content():
 def clear_chat_id():
     if thread_safe_session_state.get("chat_id"): 
        thread_safe_session_state.delete("chat_id")
+
+def move_to_front(lst, value):
+    if value in lst:
+        lst.remove(value)
+        lst.insert(0, value)
+    return lst
+
 
 with main_column:
     st.title(f""":rainbow[LLM Gateway API Sample]""")
@@ -369,8 +403,8 @@ with right_column:
     selected_provider = st.session_state.provider_selection = st.selectbox("Provider", provider_options, on_change=clear_chat_id)
 
     model_map = {
-            "Claude 3 Sonnet Bedrock": "anthropic.claude-3-sonnet-20240229-v1:0",
             "Claude 3 Haiku Bedrock": "anthropic.claude-3-haiku-20240307-v1:0",
+            "Claude 3 Sonnet Bedrock": "anthropic.claude-3-sonnet-20240229-v1:0",
             "Llama 3 Bedrock": "meta.llama3-70b-instruct-v1:0",
             "Amazon Titan G1 Express": "amazon.titan-text-express-v1",
             "Mixtral 8x7B Instruct Bedrock": "mistral.mixtral-8x7b-instruct-v0:1",
@@ -383,6 +417,15 @@ with right_column:
 
             #Note: Azure does not use constant model ids. Instead, you call a "Deployment" which can have any name you want. So you will need to edit all the Azure model ids to match your deployment
             "GPT 3.5 Azure": "my-gpt35"
+    }
+    
+    bedrock_reverse_model_map = {
+            "anthropic.claude-3-haiku-20240307-v1:0": "Claude 3 Haiku Bedrock",
+            "anthropic.claude-3-sonnet-20240229-v1:0": "Claude 3 Sonnet Bedrock",
+            "meta.llama3-70b-instruct-v1:0": "Llama 3 Bedrock",
+            "amazon.titan-text-express-v1": "Amazon Titan G1 Express",
+            "mistral.mixtral-8x7b-instruct-v0:1": "Mixtral 8x7B Instruct Bedrock",
+            "Mixtral 8x7B Instruct Bedrock": "mistral.mixtral-8x7b-instruct-v0:1",
         }
 
     provider_map = {
@@ -392,16 +435,15 @@ with right_column:
         "Anthropic": "anthropic",
         "Azure": "azure",
     }
-
+    model_access_list = st.session_state.model_access.split(",")
     if selected_provider == "Amazon Bedrock":
         # Model dropdown
-        model_options = [
-            "Claude 3 Sonnet Bedrock",
-            "Claude 3 Haiku Bedrock",
-            "Llama 3 Bedrock",
-            "Amazon Titan G1 Express",
-            "Mixtral 8x7B Instruct Bedrock",
-        ]
+        model_options = []
+        for model in model_access_list:
+            model_options.append(bedrock_reverse_model_map[model])
+
+        move_to_front(model_options, "Claude 3 Haiku Bedrock")
+        
     elif selected_provider == "OpenAI":
         # Model dropdown
         model_options = ["GPT 3.5 OpenAI", "GPT 4 OpenAI"]
@@ -440,7 +482,6 @@ with right_column:
     - Model Id: {st.session_state.model_id}
     - User: {username}
     - Estimated usage for this period: \$ {metrics["total_estimated_cost"]} / \$ {metrics["limit"]}
-    - Model Access: {st.session_state.model_access}
     """)
 
     n_input_tokens = metrics["n_input_tokens"]
@@ -451,18 +492,18 @@ with right_column:
     st.write(f"""
     ##### Input metrics:
     - n_tokens: {n_input_tokens}
-    - cost: $ {input_cost}
+    - cost: $ {format_cost(input_cost)}
     """)
 
     st.write(f"""
     ##### Output metrics:
     - n_tokens: {n_output_tokens}
-    - cost: $ {output_cost}
+    - cost: $ {format_cost(output_cost)}
     """)
 
     st.write(f"""
     ##### Combined I/O metrics:
     - n_tokens: {n_output_tokens + n_input_tokens}
-    - cost: $ {float(output_cost) + float(input_cost)}
+    - cost: $ {format_cost(float(output_cost) + float(input_cost))}
     """)
 

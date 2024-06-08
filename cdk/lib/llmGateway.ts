@@ -868,15 +868,7 @@ export class LlmGatewayStack extends cdk.Stack {
       },
     )
 
-    const modelAccessAuthorizerGetSummary = new apigw.TokenAuthorizer(this,
-      "ModelAccessAuthorizerGetSummary",
-      {
-        handler: authHandler,
-        identitySource: "method.request.header.Authorization",
-      },
-    )
-
-    const modelAccessAuthorizerGetSummaryNonAdmin = new apigw.TokenAuthorizer(this,
+    const modelAccessAuthorizerGetNonAdmin = new apigw.TokenAuthorizer(this,
       "ModelAccessAuthorizerGetSummaryNonAdmin",
       {
         handler: authHandlerNonAdmin,
@@ -923,20 +915,12 @@ export class LlmGatewayStack extends cdk.Stack {
       authorizer: modelAccessAuthorizerGet
     });
 
-    // Add a new resource for the summary under quota
-    const summaryResource = modelAccessResource.addResource('summary');
-
     // Add a new resource for the currentuser under modelaccess
-    const currentuserSummaryResource = modelAccessResource.addResource('currentusersummary');
-
-    // Add GET method for the /modelaccess/summary endpoint
-    summaryResource.addMethod('GET', new apigw.LambdaIntegration(modelAccessHandler), {
-      authorizer: modelAccessAuthorizerGetSummary
-  });
+    const currentuserResource = modelAccessResource.addResource('currentuser');
 
     // Add GET method for the /modelaccess/currentusersummary endpoint
-    currentuserSummaryResource.addMethod('GET', new apigw.LambdaIntegration(modelAccessHandler), {
-      authorizer: modelAccessAuthorizerGetSummaryNonAdmin
+    currentuserResource.addMethod('GET', new apigw.LambdaIntegration(modelAccessHandler), {
+      authorizer: modelAccessAuthorizerGetNonAdmin
     });
 
     // Add POST endpoint
@@ -1389,7 +1373,8 @@ export class LlmGatewayStack extends cdk.Stack {
       environment: {
         LlmGatewayUrl: llmGatewayUrl,
         ApiGatewayURL: apiGatewayApi.url,
-        ApiGatewayModelAccessURL: apiGatewayModelAccessApi.url
+        ApiGatewayModelAccessURL: apiGatewayModelAccessApi.url,
+        AdminList: this.adminList
       },
       healthCheck: {
         command: ['CMD-SHELL', 'curl -f http://localhost:8501/healthz || exit 1'],
