@@ -74,7 +74,7 @@ def check_quota(user_name, api_key_name, model_id):
                     print(f'Quota exceeded. Quota frequency: {frequency}. Total usage: {quota_limit_map[frequency]["total_estimate_cost"]}. Limit: {limit}')
                     create_request_detail(user_name, api_key_name, None, None, None, model_id, "Quota Exceeded")
                     raise HTTPException(
-                        status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=f"Quota exceeded. Quota frequency: {frequency}. Total usage: {quota_limit_map[frequency]["total_estimate_cost"]}. Limit: {limit}"
+                        status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=f"Quota exceeded. Quota frequency: {frequency}. Total usage: {format_two_significant_figures(quota_limit_map[frequency]["total_estimate_cost"])}. Limit: {limit}"
                     )
         if request_summary_needs_update:
             print(f'request summary needs update, updating...')
@@ -82,6 +82,11 @@ def check_quota(user_name, api_key_name, model_id):
 
     print(f'Quota is not exceeded. Processing request.')
     return requests_summary
+
+
+def format_two_significant_figures(num_str):
+    num = float(num_str)
+    return f"{num:.2g}"
 
 def build_new_requests_summary(user_name, quota_config):
     try:

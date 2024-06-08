@@ -13,7 +13,6 @@ show_pages(
         Page("pages2/apikey_get.py", "Manage API Keys"),
         Section(name="Admin Pages", icon="👑"),
         Page("pages2/model_access_create.py", "Create Model Access Config"),
-        Page("pages2/model_access_status.py", "Check Model Access Status"),
         Page("pages2/model_access_management.py", "Manage Model Access"),
         Page("pages2/quota_create.py", "Create Quota Config"),
         Page("pages2/quota_status.py", "Check Quota Status"),

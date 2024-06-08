@@ -22,7 +22,6 @@ COPY pages2/quota_status.py /app/pages2/
 COPY pages2/quota_management.py /app/pages2/
 COPY pages2/model_access_create.py /app/pages2/
 COPY pages2/model_access_management.py /app/pages2/
-COPY pages2/model_access_status.py /app/pages2/
 
 # Copy the Streamlit configuration file
 COPY config.toml /home/streamlit/.streamlit/

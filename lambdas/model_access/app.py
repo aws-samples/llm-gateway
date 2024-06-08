@@ -67,12 +67,18 @@ def get_user_model_access_map(table, username, response):
         )
 
         if dynamo_result['Items']:
-            body = dynamo_result['Items'][0]["model_access_map"]
+            print(f"dynamo_result['Items']: {dynamo_result['Items']}")
+            print(f"dynamo_result['Items'][0]['model_access_map']: {dynamo_result['Items'][0]['model_access_map']}")
+            for key, value in dynamo_result['Items'][0]['model_access_map'].items():
+                print(f'key: {key} value: {value}')
+                body[key] = value
+            body['default'] = "false"
         response['body'] = json.dumps(body)
 
     except Exception as e:
         # Handle potential errors
-            return {
+        print(f'exception: {e}')
+        return {
             "statusCode": 500,
             "body": json.dumps({"message": str(e)})
         }
@@ -106,30 +112,33 @@ def lambda_handler(event, context):
                 }
         error = get_user_model_access_map(table, username, response)
         if error:
-            return error
-    elif http_method == 'GET' and path == "/modelaccess/summary":
-        if not username:
-            return {
-                    "statusCode": 400,
-                    "body": json.dumps({"message": "query parameter 'username' is required"})
-                }
-        error = get_user_model_access_map(table, username, response)
-        if error:
             print(f'error: {error}')
             return error
         print(f"response['body']: {response['body']}")
         if response['body'] == "{}":
             print(f"getting default model access")
-            response['body'] = json.dumps(get_default_model_access())
-            print(f"getting default model access")
-    elif http_method == 'GET' and path == "/modelaccess/currentusersummary":
+            body = {}
+            default_model_access = get_default_model_access()
+            for key, value in default_model_access.items():
+                body[key] = value
+            body['default'] = "true"
+            response['body'] = json.dumps(body)
+            print(f"response['body']: {response['body']}")
+    elif http_method == 'GET' and path == "/modelaccess/currentuser":
         authorization_header = headers["Authorization"]
         username = get_user_name(authorization_header)
         error = get_user_model_access_map(table, username, response)
         if error:
             return error
         if response['body'] == "{}":
-            response['body'] = json.dumps(get_default_model_access())
+            print(f"getting default model access")
+            body = {}
+            default_model_access = get_default_model_access()
+            for key, value in default_model_access.items():
+                body[key] = value
+            body['default'] = "true"
+            response['body'] = json.dumps(body)
+            print(f"response['body']: {response['body']}")
     elif http_method == 'POST':
         if not username:
             return {
