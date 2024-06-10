@@ -227,7 +227,7 @@ metrics = {
 
 def format_two_significant_figures(num_str):
     num = float(num_str)
-    return f"{num:.2g}"
+    return f"{num:.2f}"
 
 def format_cost(num_str):
     num = float(num_str)
@@ -236,6 +236,7 @@ def format_cost(num_str):
 quota_summary = fetch_quota_summary()[0]
 metrics["total_estimated_cost"] = format_two_significant_figures(quota_summary['total_estimated_cost'])
 metrics["limit"] = quota_summary['limit']
+metrics['frequency'] = quota_summary['frequency']
 
 
 def bridge(async_gen, sync_queue):
@@ -276,8 +277,13 @@ def update_metrics(s, type_):
     quota_summary = fetch_quota_summary()[0]
     metrics["total_estimated_cost"] = format_two_significant_figures(quota_summary['total_estimated_cost'])
     metrics["limit"] = quota_summary['limit']
+    metrics['frequency'] = quota_summary['frequency']
+
     print(metrics)
 
+def convert_frequency_to_human_readable(frequency):
+    if frequency == "weekly":
+        return "week"
 
 # Create two columns
 main_column, right_column = st.columns([3, 1])
@@ -479,7 +485,7 @@ with right_column:
     - Model Selected: {st.session_state.model_selection}
     - Model Id: {st.session_state.model_id}
     - User: {username}
-    - Estimated usage for this period: \$ {metrics["total_estimated_cost"]} / \$ {metrics["limit"]}
+    - Estimated usage for this {convert_frequency_to_human_readable(metrics['frequency'])}: \$ {metrics["total_estimated_cost"]} / \$ {metrics["limit"]}
     """)
 
     n_input_tokens = metrics["n_input_tokens"]
