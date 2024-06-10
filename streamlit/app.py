@@ -23,11 +23,9 @@ show_pages(
         Page("pages2/apikey_create.py", "Create API Keys"),
         Page("pages2/apikey_get.py", "Manage API Keys"),
         Section(name="Admin Pages", icon="👑"),
-        Page("pages2/model_access_create.py", "Create Model Access Config"),
-        Page("pages2/model_access_management.py", "Manage Model Access"),
-        Page("pages2/quota_create.py", "Create Quota Config"),
+        Page("pages2/manage_model_access.py", "Manage Model Access"),
+        Page("pages2/manage_quotas.py", "Manage Quotas"),
         Page("pages2/quota_status.py", "Check Quota Status"),
-        Page("pages2/quota_management.py", "Manage Quotas"),
     ]
 )
 add_indentation()
@@ -107,7 +105,7 @@ if "username" in session_token:
 else:
     username = no_username_string
 
-admin_list = os.environ["AdminList"].split(",")
+admin_list = os.environ["AdminList"].split(",") if "AdminList" in os.environ  else []
 
 if username not in admin_list and username != no_username_string:
     print(f'Username {username} is not an admin. Hiding admin pages.')
