@@ -1374,7 +1374,10 @@ export class LlmGatewayStack extends cdk.Stack {
         LlmGatewayUrl: llmGatewayUrl,
         ApiGatewayURL: apiGatewayApi.url,
         ApiGatewayModelAccessURL: apiGatewayModelAccessApi.url,
-        AdminList: this.adminList
+        AdminList: this.adminList,
+        Region: this.regionValue,
+        CognitoDomainPrefix: this.cognitoDomainPrefix,
+        CognitoClientId: this.applicationLoadBalanceruserPoolClient.userPoolClientId
       },
       healthCheck: {
         command: ['CMD-SHELL', 'curl -f http://localhost:8501/healthz || exit 1'],
