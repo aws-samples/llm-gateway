@@ -165,36 +165,42 @@ if [ $? -eq 0 ]; then
         aws lambda update-function-code \
             --function-name $LLM_GATEWAY_LAMBDA_FUNCTION \
             --image-uri $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_LLM_GATEWAY_REPOSITORY:latest \
-            --region $AWS_REGION
+            --region $AWS_REGION \
+            --no-cli-pager
     fi
 
     aws lambda update-function-code \
         --function-name $API_KEY_LAMBDA_FUNCTION_NAME \
         --image-uri $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_API_KEY_REPOSITORY:latest \
-        --region $AWS_REGION
+        --region $AWS_REGION \
+        --no-cli-pager
 
     aws lambda update-function-code \
         --function-name $QUOTA_LAMBDA_FUNCTION_NAME \
         --image-uri $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_QUOTA_REPOSITORY:latest \
-        --region $AWS_REGION
+        --region $AWS_REGION \
+        --no-cli-pager
 
     aws lambda update-function-code \
         --function-name $MODEL_ACCESS_LAMBDA_FUNCTION_NAME \
         --image-uri $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_MODEL_ACCESS_REPOSITORY:latest \
-        --region $AWS_REGION
+        --region $AWS_REGION \
+        --no-cli-pager
 
     aws ecs update-service \
         --cluster LlmGatewayUI \
         --service LlmGatewayUI \
         --force-new-deployment \
-        --desired-count 1
+        --desired-count 1 \
+        --no-cli-pager
 
     if [ -n "$LLM_GATEWAY_ECS_TASK" ] && [ "$LLM_GATEWAY_ECS_TASK" != "null" ]; then
         aws ecs update-service \
             --cluster $LLM_GATEWAY_ECS_TASK \
             --service $LLM_GATEWAY_ECS_TASK \
             --force-new-deployment \
-            --desired-count 1
+            --desired-count 1 \
+            --no-cli-pager
     fi
 else
     echo "Deployment failed"

@@ -188,7 +188,12 @@ def lambda_handler(event, context):
             )
 
             if dynamo_result['Items']:
-                body = dynamo_result['Items'][0]["quota_map"]
+                body['quota_map'] = dynamo_result['Items'][0]["quota_map"]
+                body['default'] = "false"
+            else:
+                body['quota_map'] = get_default_quota()
+                body['default'] = "true"
+
             response['body'] = json.dumps(body)
 
         except Exception as e:

@@ -17,11 +17,9 @@ COPY invoke_llm_with_streaming.py /app/
 COPY data/cost_db.csv /app/data/
 COPY pages2/apikey_create.py /app/pages2/
 COPY pages2/apikey_get.py /app/pages2/
-COPY pages2/quota_create.py /app/pages2/
 COPY pages2/quota_status.py /app/pages2/
-COPY pages2/quota_management.py /app/pages2/
-COPY pages2/model_access_create.py /app/pages2/
-COPY pages2/model_access_management.py /app/pages2/
+COPY pages2/manage_model_access.py /app/pages2/
+COPY pages2/manage_quotas.py /app/pages2/
 
 # Copy the Streamlit configuration file
 COPY config.toml /home/streamlit/.streamlit/
