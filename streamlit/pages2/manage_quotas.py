@@ -64,8 +64,11 @@ else:
 admin_list = os.environ["AdminList"].split(",") if "AdminList" in os.environ  else []
 
 if username not in admin_list and username != no_username_string:
+    role = "Developer"
     print(f'Username {username} is not an admin. Hiding admin pages.')
     hide_pages(["Admin Pages", "Manage Model Access", "Manage Quotas", "Check Quota Status"])
+else:
+    role = "Admin"
 
 def fetch_quota_config(username):
     access_token = process_access_token()
@@ -123,6 +126,18 @@ def delete_quota_config(username):
         st.experimental_rerun()
     else:
         st.error('Failed to delete Quota Config: HTTP status code ' + str(delete_response.status_code))
+
+html_content = f"""
+        <style>
+        #MainMenu {{visibility: hidden;}}
+        .css-18e3th9 {{visibility: hidden;}}
+        .stApp {{padding-top: 70px;}}
+        </style>
+        <div style="position:absolute;top:0;right:0;padding:10px;z-index:1000">
+        Logged in as: <b>{username} ({role})</b>
+        </div>
+        """
+st.markdown(html_content, unsafe_allow_html=True)
 
 frequency_options = ["weekly"]
 

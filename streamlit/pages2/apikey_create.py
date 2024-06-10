@@ -62,8 +62,11 @@ else:
 admin_list = os.environ["AdminList"].split(",") if "AdminList" in os.environ  else []
 
 if username not in admin_list and username != no_username_string:
+    role = "Developer"
     print(f'Username {username} is not an admin. Hiding admin pages.')
     hide_pages(["Admin Pages", "Manage Model Access", "Manage Quotas", "Check Quota Status"])
+else:
+    role = "Admin"
 
 # Calculate expiration timestamp based on selection
 def calculate_expiration(duration):
@@ -77,6 +80,18 @@ def calculate_expiration(duration):
         return (datetime.now(timezone.utc) + timedelta(days=365)).timestamp()
     else:
         return None
+
+html_content = f"""
+        <style>
+        #MainMenu {{visibility: hidden;}}
+        .css-18e3th9 {{visibility: hidden;}}
+        .stApp {{padding-top: 70px;}}
+        </style>
+        <div style="position:absolute;top:0;right:0;padding:10px;z-index:1000">
+        Logged in as: <b>{username} ({role})</b>
+        </div>
+        """
+st.markdown(html_content, unsafe_allow_html=True)
 
 # Form to create a new API key
 with st.form(key='create_api_key_form'):
