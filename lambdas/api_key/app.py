@@ -40,7 +40,6 @@ def get_salt():
         return secret_json['salt']
 
 SALT = get_salt()
-print(f'SALT: {SALT}')
 
 class Settings:
     def __init__(self, event, session):
@@ -117,7 +116,6 @@ def lambda_handler(event, context):
     http_method = event.get('httpMethod')
     table = boto3.resource("dynamodb").Table(API_KEY_TABLE_NAME)
     headers = event["headers"]
-    print(f'headers: {headers}')
     username = ""
     if not headers or "Authorization" not in headers:
         response = {

@@ -21,8 +21,6 @@ secrets_manager_client = boto3.client("secretsmanager")
 def api_key_auth(
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)]
 ):
-    print(f'credentials {credentials}')
-    print(f'credentials.credentials: {credentials.credentials}')
     try:
         user_name = get_user_name(credentials.credentials)
         print(f'Found user_name {user_name}. Access granted.')
@@ -90,7 +88,6 @@ def query_by_api_key_hash(api_key_hash):
 def get_user_name(authorization_header):
     try:
         user_info = get_user_info_cognito(authorization_header)
-        print(f'user_info: {user_info}')
         user_name = user_info["preferred_username"]
         return user_name
     except:
