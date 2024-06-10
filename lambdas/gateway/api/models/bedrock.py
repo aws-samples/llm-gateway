@@ -93,12 +93,7 @@ class BedrockModel(BaseChatModel, ABC):
 
     def chat(self, chat_request: ChatRequest) -> ChatResponse:
         """Default implementation for Chat API."""
-        if DEBUG:
-            logger.info("Raw request: " + chat_request.model_dump_json())
         request_body = self.compose_request_body(chat_request)
-
-        if DEBUG:
-            logger.info("Bedrock request: " + request_body)
 
         response = self.invoke_model(
             request_body=request_body,
@@ -109,8 +104,6 @@ class BedrockModel(BaseChatModel, ABC):
 
     def chat_stream(self, chat_request: ChatRequest, user_name, api_key_name) -> AsyncIterable[bytes]:
         """Default implementation for Chat Stream API"""
-        if DEBUG:
-            logger.info("Raw request: " + chat_request.model_dump_json())
         request_body = self.compose_request_body(chat_request)
         response = self.invoke_model(
             request_body=request_body,
@@ -171,8 +164,6 @@ class BedrockModel(BaseChatModel, ABC):
             self, chat_request: ChatRequest, service_response: dict, message_id: str
     ) -> ChatResponse:
         response_body = json.loads(service_response.get("body").read())
-        if DEBUG:
-            logger.info("Bedrock response body: " + str(response_body))
 
         input_tokens, output_tokens = self.get_message_usage(response_body)
         return self.create_response(
@@ -190,8 +181,6 @@ class BedrockModel(BaseChatModel, ABC):
 
         chunk_id = 0
         for event in service_response.get("body"):
-            if DEBUG:
-                logger.info("Bedrock response chunk: " + str(event))
             chunk = json.loads(event["chunk"]["bytes"])
             chunk_id += 1
 
@@ -218,7 +207,6 @@ class BedrockModel(BaseChatModel, ABC):
     def invoke_model(self, request_body: str, model_id: str, with_stream: bool = False):
         if DEBUG:
             logger.info("Invoke Bedrock Model: " + model_id)
-            logger.info("Bedrock request body: " + request_body)
         try:
             if with_stream:
                 return bedrock_runtime.invoke_model_with_response_stream(
@@ -302,8 +290,6 @@ class BedrockModel(BaseChatModel, ABC):
                 total_tokens=input_tokens + output_tokens,
             ),
         )
-        if DEBUG:
-            logger.info("Proxy response :" + response.model_dump_json())
         return response
 
     @staticmethod
@@ -343,8 +329,6 @@ class BedrockModel(BaseChatModel, ABC):
                     total_tokens=input_tokens + output_tokens,
                 ),
             )
-        if DEBUG:
-            logger.info("Proxy response :" + response.model_dump_json())
         return response
 
 
@@ -369,9 +353,7 @@ Please think if you need to use a tool or not for user's question, you must:
         }
         system_prompt = ""
         converted_messages = []
-        print(f'chat_request.messages: {chat_request.messages}')
         for message in chat_request.messages:
-            print(f'message: {message}')
             if message.role == "system":
                 assert isinstance(message.content, str)
                 system_prompt += message.content + "\n"
@@ -418,8 +400,6 @@ Please think if you need to use a tool or not for user's question, you must:
             args["stop_sequences"] = ["</function>"]
         args["messages"] = self.merge_message(converted_messages)
         if system_prompt:
-            if DEBUG:
-                logger.info("System Prompt: " + system_prompt)
             args["system"] = system_prompt
 
         return json.dumps(args)
@@ -428,8 +408,6 @@ Please think if you need to use a tool or not for user's question, you must:
             self, chat_request: ChatRequest, service_response: dict, message_id: str
     ) -> ChatResponse:
         response_body = json.loads(service_response.get("body").read())
-        if DEBUG:
-            logger.info("Bedrock response body: " + str(response_body))
         message = response_body["content"][0]["text"]
         finish_reason = response_body["stop_reason"]
         tools = None
@@ -459,8 +437,6 @@ Please think if you need to use a tool or not for user's question, you must:
         first_token = True
         index = 0
         for event in service_response.get("body"):
-            if DEBUG:
-                logger.info("Bedrock response chunk: " + str(event))
             chunk = json.loads(event["chunk"]["bytes"])
             chunk_id += 1
 
@@ -526,8 +502,6 @@ Please think if you need to use a tool or not for user's question, you must:
             yield response
 
     def _parse_tool_message(self, tool_message: str) -> list[ToolCall]:
-        if DEBUG:
-            logger.info("Tool message: " + tool_message.replace("\n", " "))
         try:
             tool_messages = tool_message[tool_message.rindex("<function>") + len("<function>"):]
             function = json.loads(tool_messages.replace("\n", " "))
@@ -617,10 +591,6 @@ class LlamaModel(BedrockModel):
 
         {{ user_message_2 }}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
         """
-        if DEBUG:
-            logger.info("Convert below messages to prompt for Llama 3: ")
-            for msg in chat_request.messages:
-                logger.info(msg.model_dump_json())
         bos_token = "<|begin_of_text|>"
 
         prompt_lines = []
@@ -630,8 +600,6 @@ class LlamaModel(BedrockModel):
             )
         prompt_lines.append(f"<|start_header_id|>assistant<|end_header_id|>\n\n")
         prompt = bos_token + "".join(prompt_lines)
-        if DEBUG:
-            logger.info("Converted prompt: " + prompt.replace("\n", "\\n"))
         return prompt
 
     @staticmethod
@@ -641,10 +609,6 @@ class LlamaModel(BedrockModel):
         <s>[INST] <<SYS>>\n{your_system_message}\n<</SYS>>\n\n{user_message_1} [/INST] {model_reply_1}</s>
         <s>[INST] {user_message_2} [/INST]
         """
-        if DEBUG:
-            logger.info("Convert below messages to prompt for Llama 2: ")
-            for msg in chat_request.messages:
-                logger.info(msg.model_dump_json())
         bos_token = "<s>"
         eos_token = "</s>"
         prompt = ""
@@ -675,8 +639,6 @@ class LlamaModel(BedrockModel):
         if system_prompt:
             system_prompt = "<<SYS>>" + system_prompt + "<</SYS>>"
         prompt = bos_token + "[INST] " + system_prompt + prompt
-        if DEBUG:
-            logger.info("Converted prompt: " + prompt.replace("\n", "\\n"))
         return prompt
 
     def compose_request_body(self, chat_request: ChatRequest) -> str:
@@ -704,10 +666,6 @@ class MistralModel(BedrockModel):
         <s>[INST] {user_message_2} [/INST]
         """
         # TODO: maybe reuse the Llama 2 one.
-        if DEBUG:
-            logger.info("Convert below messages to prompt for Mistral/Mixtral model: ")
-            for msg in chat_request.messages:
-                logger.info(msg.model_dump_json())
         bos_token = "<s>"
         eos_token = "</s>"
         prompt = ""
@@ -737,8 +695,6 @@ class MistralModel(BedrockModel):
                 end_turn = True
 
         prompt = bos_token + "[INST] " + system_prompt + prompt
-        if DEBUG:
-            logger.info("Converted prompt: " + prompt.replace("\n", "\\n"))
         return prompt
 
     def compose_request_body(self, chat_request: ChatRequest) -> str:
@@ -799,7 +755,6 @@ class BedrockEmbeddingsModel(BaseEmbeddingsModel, ABC):
         body = json.dumps(args)
         if DEBUG:
             logger.info("Invoke Bedrock Model: " + model_id)
-            logger.info("Bedrock request body: " + body)
         try:
             return bedrock_runtime.invoke_model(
                 body=body,
@@ -839,8 +794,6 @@ class BedrockEmbeddingsModel(BaseEmbeddingsModel, ABC):
                 total_tokens=input_tokens + output_tokens,
             ),
         )
-        if DEBUG:
-            logger.info("Proxy response :" + response.model_dump_json())
         return response
 
 
@@ -880,8 +833,6 @@ class CohereEmbeddingsModel(BedrockEmbeddingsModel):
             args=self._parse_args(embeddings_request), model_id=embeddings_request.model
         )
         response_body = json.loads(response.get("body").read())
-        if DEBUG:
-            logger.info("Bedrock response body: " + str(response_body))
 
         return self._create_response(
             embeddings=response_body["embeddings"],
@@ -921,8 +872,6 @@ class TitanEmbeddingsModel(BedrockEmbeddingsModel):
             args=self._parse_args(embeddings_request), model_id=embeddings_request.model
         )
         response_body = json.loads(response.get("body").read())
-        if DEBUG:
-            logger.info("Bedrock response body: " + str(response_body))
 
         return self._create_response(
             embeddings=[response_body["embedding"]],

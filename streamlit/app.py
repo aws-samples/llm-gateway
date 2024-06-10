@@ -85,12 +85,10 @@ def process_session_token():
 
 def process_access_token():
     headers = _get_websocket_headers()
-    print(f'headers: {headers}')
     if 'X-Amzn-Oidc-Accesstoken' not in headers:
         print(f'returning None')
         return None
     access_token = headers['X-Amzn-Oidc-Accesstoken']
-    print(f'returning {access_token}')
     return access_token
 
 session_token = process_session_token()
@@ -357,7 +355,6 @@ with main_column:
             st.session_state.messages.append({"role": "user", "content": st.session_state.prompt})
 
         if len(messages) > 1:
-            print(st.session_state.messages)
             for message in st.session_state.messages[:-1]:
                 with st.chat_message(message["role"]):
                     st.markdown(message["content"])

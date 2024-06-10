@@ -26,7 +26,6 @@ def authenticate_user(client, user_pool_id, client_id, username, password):
                 'PASSWORD': password
             }
         )
-        print(f'Response: {response}')
 
         if 'AuthenticationResult' in response:
             return response['AuthenticationResult']['AccessToken']
@@ -49,7 +48,6 @@ def respond_new_password_required(client, username, session, new_password, clien
                 'NEW_PASSWORD': new_password
             }
         )
-        print(f'Password update response: {response}')
         return response.get('AuthenticationResult', {}).get('AccessToken')
     except (ClientError, BotoCoreError) as error:
         return str(error)

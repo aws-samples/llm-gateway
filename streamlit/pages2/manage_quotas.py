@@ -27,12 +27,10 @@ QuotaURL = os.environ["ApiGatewayURL"] + "quota"
 
 def process_access_token():
     headers = _get_websocket_headers()
-    print(f'headers: {headers}')
     if 'X-Amzn-Oidc-Accesstoken' not in headers:
         print(f'returning None')
         return None
     access_token = headers['X-Amzn-Oidc-Accesstoken']
-    print(f'returning {access_token}')
     return access_token
 
 def process_session_token():

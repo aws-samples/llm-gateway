@@ -44,7 +44,6 @@ def get_default_quota():
 
 def get_user_name(authorization_header):
     user_info = get_user_info_cognito(authorization_header)
-    print(f'user_info: {user_info}')
     user_name = user_info["preferred_username"]
     return user_name
 
@@ -149,7 +148,6 @@ def lambda_handler(event, context):
     http_method = event.get('httpMethod')
     table = boto3.resource("dynamodb").Table(QUOTA_TABLE_NAME)
     headers = event["headers"]
-    print(f'headers: {headers}')
 
     query_params = event.get('queryStringParameters') or {}  # Use an empty dict as a default
     username = query_params.get('username', None)
