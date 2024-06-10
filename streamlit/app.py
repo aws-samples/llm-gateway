@@ -110,10 +110,12 @@ else:
     username = no_username_string
 
 admin_list = os.environ["AdminList"].split(",") if "AdminList" in os.environ  else []
-
 if username not in admin_list and username != no_username_string:
+    role = "Developer"
     print(f'Username {username} is not an admin. Hiding admin pages.')
     hide_pages(["Admin Pages", "Create Model Access Config", "Manage Model Access", "Create Quota Config", "Check Quota Status", "Manage Quotas"])
+else:
+    role = "Admin"
 
 def initialize_model_id():
     st.session_state['model_id'] = "anthropic.claude-3-sonnet-20240229-v1:0"
@@ -288,6 +290,18 @@ def update_metrics(s, type_):
 def convert_frequency_to_human_readable(frequency):
     if frequency == "weekly":
         return "week"
+
+html_content = f"""
+        <style>
+        #MainMenu {{visibility: hidden;}}
+        .css-18e3th9 {{visibility: hidden;}}
+        .stApp {{padding-top: 70px;}}
+        </style>
+        <div style="position:absolute;top:0;right:0;padding:10px;z-index:1000">
+        Logged in as: <b>{username} ({role})</b>
+        </div>
+        """
+st.markdown(html_content, unsafe_allow_html=True)
 
 # Create two columns
 main_column, right_column = st.columns([3, 1])
@@ -488,7 +502,6 @@ with right_column:
     - Provider Id: {st.session_state.provider_id}
     - Model Selected: {st.session_state.model_selection}
     - Model Id: {st.session_state.model_id}
-    - User: {username}
     - Estimated usage for this {convert_frequency_to_human_readable(metrics['frequency'])}: \$ {metrics["total_estimated_cost"]} / \$ {metrics["limit"]}
     """)
 
