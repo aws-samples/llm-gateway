@@ -113,7 +113,7 @@ admin_list = os.environ["AdminList"].split(",") if "AdminList" in os.environ  el
 if username not in admin_list and username != no_username_string:
     role = "Developer"
     print(f'Username {username} is not an admin. Hiding admin pages.')
-    hide_pages(["Admin Pages", "Create Model Access Config", "Manage Model Access", "Create Quota Config", "Check Quota Status", "Manage Quotas"])
+    hide_pages(["Admin Pages", "Manage Model Access", "Manage Quotas", "Check Quota Status"])
 else:
     role = "Admin"
 
@@ -335,7 +335,7 @@ def move_to_front(lst, value):
 
 
 with main_column:
-    st.title(f""":rainbow[LLM Gateway API Sample]""")
+    st.title(f""":rainbow[LLM Gateway]""")
 
     #Needed for switching models and refreshes to work correctly
     if "prompt" not in st.session_state or not st.session_state.prompt:
