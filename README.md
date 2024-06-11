@@ -97,27 +97,27 @@ This Demo video shows the OpenAI Client being used with an LLMGateway API Key to
 
 The following are settings which you can configure as needed for your project in your `.env` file
 
-`COGNTIO_DOMAIN_PREFIX` *(Required)* Globally unique alphanumeric string that acts as a prefix to your Cognito domain used for authentication
-`UI_CERT_ARN` *(Required)* The ARN of the first Amazon Certificate Manager Certificate that you created in the `Creating your certificate` of this ReadMe. Certificate for the UI.
-`UI_DOMAIN_NAME` *(Required)* The first sub domain you created in the `Creating your certificate` section of this ReadMe. Domain name for the UI.
-`LLM_GATEWAY_CERT_ARN` *(Required)* The ARN of the second Amazon Certificate Manager Certificate that you created in the `Creating your certificate` of this ReadMe. Certificate for the LLMGateway API.
-`LLM_GATEWAY_DOMAIN_NAME` *(Required)* The second sub domain you created in the `Creating your certificate` section of this ReadMe. Domain name for the LLMGateway API.
-`METADATA_URL_COPIED_FROM_AZURE_AD` *(Optional)* Field needed for Azure AD Authentication. Detailed in the `Azure Ad Authentication Steps` section of this ReadMe
-`GIT_HUB_CLIENT_ID` *(Optional)* Field needed for GitHub Authentication. Detailed in the `GitHub Authentication Steps` section of this ReadMe
-`GIT_HUB_CLIENT_SECRET` *(Optional)* Field needed for GitHub Authentication. Detailed in the `GitHub Authentication Steps` section of this ReadMe
-`GIT_HUB_PROXY_URL` *(Optional)* Field needed for GitHub Authentication. Detailed in the `GitHub Authentication Steps` section of this ReadMe
-`ADMIN_LIST` *(Optional)* Comma separated list of usernames that you want to have the admin role. The admin role allows you to create usage quotas and model access policies.
-`ECR_STREAMLIT_REPOSITORY` *(Required)* Name of the ECR Repository that will store the Streamlit UI Docker Container Image
-`ECR_API_KEY_REPOSITORY` *(Required)* Name of the ECR Repository that will store the API Key Management Lambda Function Docker Container Image
-`ECR_LLM_GATEWAY_REPOSITORY` *(Required)* Name of the ECR Repository that will store the LLMGateway API Docker Container Image
-`ECR_QUOTA_REPOSITORY` *(Required)* Name of the ECR Repository that will store the Usage Quota Management Lambda Function Docker Container Image
-`ECR_MODEL_ACCESS_REPOSITORY` *(Required)* Name of the ECR Repository that will store the Model Access Management Lambda Function Docker Container Image
-`LLM_GATEWAY_IS_PUBLIC` *(Required)* Whether or not the application load balancer that provides access to the LLMGateway API is accessible from the internet.
-`SERVERLESS_API` *(Required)* Whether or not the LLMGateway API is Serverless (Lambda) or not (Elastic Container Service (ECS)). Currently, streaming is not supported with Serverless.
-`DEFAULT_QUOTA_FREQUENCY` *(Required)* The default period over which usage quotas apply. Currently only supports `weekly`. This means a user's spending limit resets every week. Will eventually support other time periods.
-`DEFAULT_QUOTA_DOLLARS` *(Required)* The default amount of money in dollars every user can spend per week.
-`DEFAULT_MODEL_ACCESS` *(Required)* Comma separeated list of models every user will have access to by default
-`DEBUG` *(Required)* Set to true to enable additional logging
+* `COGNTIO_DOMAIN_PREFIX` *(Required)* Globally unique alphanumeric string that acts as a prefix to your Cognito domain used for authentication
+* `UI_CERT_ARN` *(Required)* The ARN of the first Amazon Certificate Manager Certificate that you created in the `Creating your certificate` of this ReadMe. Certificate for the UI.
+* `UI_DOMAIN_NAME` *(Required)* The first sub domain you created in the `Creating your certificate` section of this ReadMe. Domain name for the UI.
+* `LLM_GATEWAY_CERT_ARN` *(Required)* The ARN of the second Amazon Certificate Manager Certificate that you created in the `Creating your certificate` of this ReadMe. Certificate for the LLMGateway API.
+* `LLM_GATEWAY_DOMAIN_NAME` *(Required)* The second sub domain you created in the `Creating your certificate` section of this ReadMe. Domain name for the LLMGateway API.
+* `METADATA_URL_COPIED_FROM_AZURE_AD` *(Optional)* Field needed for Azure AD Authentication. Detailed in the `Azure Ad Authentication Steps` section of this ReadMe
+* `GIT_HUB_CLIENT_ID` *(Optional)* Field needed for GitHub Authentication. Detailed in the `GitHub Authentication Steps` section of this ReadMe
+* `GIT_HUB_CLIENT_SECRET` *(Optional)* Field needed for GitHub Authentication. Detailed in the `GitHub Authentication Steps` section of this ReadMe
+* `GIT_HUB_PROXY_URL` *(Optional)* Field needed for GitHub Authentication. Detailed in the `GitHub Authentication Steps` section of this ReadMe
+* `ADMIN_LIST` *(Optional)* Comma separated list of usernames that you want to have the admin role. The admin role allows you to create usage quotas and model access policies.
+* `ECR_STREAMLIT_REPOSITORY` *(Required)* Name of the ECR Repository that will store the Streamlit UI Docker Container Image
+* `ECR_API_KEY_REPOSITORY` *(Required)* Name of the ECR Repository that will store the API Key Management Lambda Function Docker Container Image
+* `ECR_LLM_GATEWAY_REPOSITORY` *(Required)* Name of the ECR Repository that will store the LLMGateway API Docker Container Image
+* `ECR_QUOTA_REPOSITORY` *(Required)* Name of the ECR Repository that will store the Usage Quota Management Lambda Function Docker Container Image
+* `ECR_MODEL_ACCESS_REPOSITORY` *(Required)* Name of the ECR Repository that will store the Model Access Management Lambda Function Docker Container Image
+* `LLM_GATEWAY_IS_PUBLIC` *(Required)* Whether or not the application load balancer that provides access to the LLMGateway API is accessible from the internet.
+* `SERVERLESS_API` *(Required)* Whether or not the LLMGateway API is Serverless (Lambda) or not (Elastic Container Service (ECS)). Currently, streaming is not supported with Serverless.
+* `DEFAULT_QUOTA_FREQUENCY` *(Required)* The default period over which usage quotas apply. Currently only supports `weekly`. This means a user's spending limit resets every week. Will eventually support other time periods.
+* `DEFAULT_QUOTA_DOLLARS` *(Required)* The default amount of money in dollars every user can spend per week.
+* `DEFAULT_MODEL_ACCESS` *(Required)* Comma separeated list of models every user will have access to by default
+* `DEBUG` *(Required)* Set to true to enable additional logging
 
 ## Security
 See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
