@@ -27,13 +27,13 @@ This Demo video shows the OpenAI Client being used with an LLMGateway API Key to
 
 ## How to deploy the backend
 
-#### Creating your certificate
+### Creating your certificate
 
-##### Domain and Certifcate, AWS Internal
+#### Domain and Certifcate, AWS Internal
 
 1. Reach out to mirodrr for instructions on this
 
-##### Domain and Certificate, AWS Customer
+#### Domain and Certificate, AWS Customer
 
 1. Follow the instructions here to create a certificate with AWS Certificate Manager: https://docs.aws.amazon.com/acm/latest/userguide/gs-acm-request-public.html
 
@@ -93,7 +93,7 @@ This Demo video shows the OpenAI Client being used with an LLMGateway API Key to
 15. If you are using AzureAd or GitHub for authentication, skip this step. To use Cognito Authentication against the API Gateway WebSocket, you'll need a Cognito user. Create one with your desired username and password with the `python3 create_cognito_user.py` script in the `scripts` folder. Once you do that, Streamlit will automatically use the user you created to authenticate to the LLM Gateway.
 16. Go to the url in the `LlmGatewayStack.StreamlitUiUrl` stack output
 
-### Deployment settings
+#### Deployment settings
 
 The following are settings which you can configure as needed for your project in your `.env` file
 
@@ -118,6 +118,54 @@ The following are settings which you can configure as needed for your project in
 * `DEFAULT_QUOTA_DOLLARS` *(Required)* The default amount of money in dollars every user can spend per week.
 * `DEFAULT_MODEL_ACCESS` *(Required)* Comma separeated list of models every user will have access to by default
 * `DEBUG` *(Required)* Set to true to enable additional logging
+
+## How to use the UI
+
+Once you have gone to the URL in `LlmGatewayStack.StreamlitUiUrl` from the stack output in the final step of the `Deployment Steps` section, you will enter the UI. Below are images of each of the pages, and what they do
+
+### Developer Pages
+
+#### Main Chat App
+
+This is the page you will start on. On the right, you can select your provider (only Amazon Bedrock for now), and your LLM Model you want to use. The list of models you see is determined by your Model Access policy set by your admin. On the right you can also see your "Estimated usage for this week", showing you how close you are to exceeding your weekly usage quota, also set by your admin. When you make a request, you can see exactly how much that request cost in the bottom right metrics section
+
+![Main Chat App](./media/Main_Chat_App.png)
+
+
+#### Create API Keys
+
+This is the page where you can create an API key in order to use the LLMGateway from outside the main UI. You specify a name for the key, an expiration date (or set to never expire), and click `Create`. The key is not saved, so copy it down when it appears on the screen. You can use this API key with an OpenAI Client or tooling in the exact same way you would use a real OpenAI API key, but running against Bedrock.
+
+![Create API Keys](./media/Create_API_Keys.png)
+
+
+#### Manage API Keys
+
+This is the page where you can view your existing API keys, their status (valid or expired), and when they expire. You can also delete any keys you no longer want
+
+![Manage API Keys](./media/Manage_API_Keys.png)
+
+### Admin Pages
+
+These pages are Admin only. If you are not an Admin, they will not be visible to you, and the corresponding APIs will throw a 403 if you try to use them
+
+#### Manage Model Access
+
+This is the page where you can assign a policy to a specific user to determine what Models they can access. You type in the user's username, click `Submit`, and then choose from a multi-select drop down menu the models they can use. Then, you click `Save Changes`. If you'd like to restore the defaults for that user, you can click `Reset To Defaults`
+
+![Manage Model Access](./media/Manage_Model_Access.png)
+
+#### Manage Quotas
+
+This is the page where you can assign a usage quota to a specific user to determine how much money they can spend per week. You type in the user's username, click `Submit`. Then, choose from a multi-select drop down menu the frequency of their quota (just weekly for now). Next, you choose the quota limit in dollars that they can spend each week. Finally, you click `Save Changes`. If you'd like to restore the defaults for that user, you can click `Reset To Defaults`
+
+![Manage Quotas](./media/Manage_Quotas.png)
+
+#### Check Quota Status
+
+This is the page where you can see how close a user is to exceeding their quota. You type in the user's username, click `Submit`. Then you can see details about their quota, how much of it they've consumed, and whether or not they've exceeded it.
+
+![Check Quota Status](./media/Check_Quota_Status.png)
 
 ## Security
 See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
