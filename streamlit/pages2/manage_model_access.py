@@ -24,14 +24,43 @@ show_pages(
 add_indentation()
 
 ModelAccessURL = os.environ["ApiGatewayModelAccessURL"] + "modelaccess"
+region = os.environ["Region"]
 
-model_map = {
+#map for us-east-1, us-west-2, ap-south-1, 
+model_map_1 = {
             "anthropic.claude-3-haiku-20240307-v1:0": "Claude 3 Haiku",
             "anthropic.claude-3-sonnet-20240229-v1:0": "Claude 3 Sonnet",
             "meta.llama3-70b-instruct-v1:0": "Llama 3",
             "amazon.titan-text-express-v1": "Amazon Titan",
             "mistral.mixtral-8x7b-instruct-v0:1": "Mixtral 8x7B",
         }
+
+#map for ap-southeast-2, eu-west-1, eu-west-3
+model_map_2 = {
+            "anthropic.claude-3-haiku-20240307-v1:0": "Claude 3 Haiku",
+            "anthropic.claude-3-sonnet-20240229-v1:0": "Claude 3 Sonnet",
+            "amazon.titan-text-express-v1": "Amazon Titan",
+            "mistral.mixtral-8x7b-instruct-v0:1": "Mixtral 8x7B",
+        }
+
+#map for eu-central-1
+model_map_3 = {
+            "anthropic.claude-3-haiku-20240307-v1:0": "Claude 3 Haiku",
+            "anthropic.claude-3-sonnet-20240229-v1:0": "Claude 3 Sonnet",
+            "amazon.titan-text-express-v1": "Amazon Titan",
+        }
+
+region_model_map = {
+    "us-east-1": model_map_1,
+    "us-west-2": model_map_1,
+    "ap-south-1": model_map_1,
+    "ap-southeast-2": model_map_2,
+    "eu-west-1": model_map_2,
+    "eu-west-3": model_map_2,
+    "eu-central-1": model_map_3
+}
+
+chosen_model_map = region_model_map[region]
 
 def process_access_token():
     headers = _get_websocket_headers()
@@ -80,9 +109,9 @@ def build_human_readable_model_list(model_access_list):
     human_string = ""
     for model in model_access_list.split(","):
         if human_string == "":
-            human_string += model_map[model]
+            human_string += chosen_model_map[model]
         else:
-            human_string += ", " + model_map[model]
+            human_string += ", " + chosen_model_map[model]
     print(f'human_string: {human_string}')
     return human_string
 
@@ -182,12 +211,12 @@ if 'model_access_config' in st.session_state and st.session_state.model_access_c
     col5.markdown("**Action**")
 
     col1.write(st.session_state.selected_username)
-    current_access_list = [model_map[model] for model in st.session_state.model_access_config["model_access_list"].split(",")]
-    new_access_list = col2.multiselect("Edit Access List", list(model_map.values()), default=current_access_list)
+    current_access_list = [chosen_model_map[model] for model in st.session_state.model_access_config["model_access_list"].split(",")]
+    new_access_list = col2.multiselect("Edit Access List", list(chosen_model_map.values()), default=current_access_list)
     col3.write("Default" if st.session_state.model_access_config['default'].lower() == "true" else "Custom")
 
     if col4.button('Save Changes', key=f"save_{st.session_state.selected_username}"):
-        new_access_codes = [key for key, value in model_map.items() if value in new_access_list]
+        new_access_codes = [key for key, value in chosen_model_map.items() if value in new_access_list]
         update_model_access_config(st.session_state.selected_username, new_access_codes)
 
     if not st.session_state.model_access_config['default'].lower() == "true":
