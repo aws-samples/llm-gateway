@@ -72,12 +72,6 @@ echo $GIT_HUB_CLIENT_ID
 echo $GIT_HUB_CLIENT_SECRET
 echo $GIT_HUB_PROXY_URL
 echo $COGNTIO_DOMAIN_PREFIX
-echo $OPENAI_API_KEY
-echo $GOOGLE_API_KEY
-echo $ANTHROPIC_API_KEY
-echo $AZURE_OPENAI_ENDPOINT
-echo $AZURE_OPENAI_API_KEY
-echo $AZURE_OPENAI_API_VERSION
 echo $ECR_API_KEY_REPOSITORY
 echo $ECR_LLM_GATEWAY_REPOSITORY
 echo $LLM_GATEWAY_IS_PUBLIC
@@ -104,10 +98,6 @@ cd -
 echo "Deploying the CDK stack..."
 cdk deploy "$STACK_NAME" \
 --context architecture=$ARCH \
---context useApiKey=$API_GATEWAY_USE_API_KEY \
---context useIamAuth=$API_GATEWAY_USE_IAM_AUTH \
---context maxTokens=$DEFAULT_MAX_TOKENS \
---context defaultTemp=$DEFAULT_TEMP \
 --context ecrStreamlitRepository=$ECR_STREAMLIT_REPOSITORY \
 --context uiCertArn=$UI_CERT_ARN \
 --context uiDomainName=$UI_DOMAIN_NAME \
@@ -116,12 +106,6 @@ cdk deploy "$STACK_NAME" \
 --context gitHubClientSecret=$GIT_HUB_CLIENT_SECRET \
 --context gitHubProxyUrl=$GIT_HUB_PROXY_URL \
 --context cognitoDomainPrefix=$COGNTIO_DOMAIN_PREFIX \
---context openaiApiKey=$OPENAI_API_KEY \
---context googleApiKey=$GOOGLE_API_KEY \
---context anthropicApiKey=$ANTHROPIC_API_KEY \
---context azureOpenaiEndpoint=$AZURE_OPENAI_ENDPOINT \
---context azureOpenaiApiKey=$AZURE_OPENAI_API_KEY \
---context azureOpenaiApiVersion=$AZURE_OPENAI_API_VERSION \
 --context apiKeyEcrRepoName=$ECR_API_KEY_REPOSITORY \
 --context llmGatewayRepoName=$ECR_LLM_GATEWAY_REPOSITORY \
 --context llmGatewayCertArn=$LLM_GATEWAY_CERT_ARN \

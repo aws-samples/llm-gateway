@@ -40,12 +40,7 @@ export class LlmGatewayStack extends cdk.Stack {
   chatHistoryTableName = "ChatHistory";
 
   // Environment variables
-  defaultMaxTokens = String(this.node.tryGetContext("maxTokens") || 4096);
-  defaultTemp = String(this.node.tryGetContext("defaultTemp") || 0.0);
-  hasIamAuth = String(this.node.tryGetContext("useIamAuth")).toLowerCase() == "true";
   regionValue = this.region;
-  useApiKey = String(this.node.tryGetContext("useApiKey")).toLowerCase() == "true";
-  opensearchDomainEndpoint = process.env.OPENSEARCH_DOMAIN_ENDPOINT || "";
   vpc = process.env.VPC || null;
   vpcSubnets = process.env.VPC_SUBNETS || null;
   vpcSecurityGroup = process.env.VPC_SECURITY_GROUP || null;
@@ -59,12 +54,6 @@ export class LlmGatewayStack extends cdk.Stack {
   gitHubClientSecret = this.node.tryGetContext("gitHubClientSecret");
   gitHubProxyUrl = this.node.tryGetContext("gitHubProxyUrl");
   cognitoDomainPrefix = this.node.tryGetContext("cognitoDomainPrefix");
-  openaiApiKey = String(this.node.tryGetContext("openaiApiKey"));
-  googleApiKey = this.node.tryGetContext("googleApiKey");
-  anthropicApiKey = this.node.tryGetContext("anthropicApiKey");
-  azureOpenaiEndpoint = this.node.tryGetContext("azureOpenaiEndpoint");
-  azureOpenaiApiKey = this.node.tryGetContext("azureOpenaiApiKey");
-  azureOpenaiApiVersion = this.node.tryGetContext("azureOpenaiApiVersion");
   apiKeyEcrRepoName = this.node.tryGetContext("apiKeyEcrRepoName");
   salt = this.node.tryGetContext("salt");
   llmGatewayRepoName = this.node.tryGetContext("llmGatewayRepoName");
@@ -548,15 +537,7 @@ export class LlmGatewayStack extends cdk.Stack {
 
     const environment = {
       CHAT_HISTORY_TABLE_NAME: chatHistoryTable.tableName,
-      DEFAULT_TEMP: this.defaultTemp,
-      DEFAULT_MAX_TOKENS: this.defaultMaxTokens,
       REGION: this.regionValue,
-      OPENAI_API_KEY: this.openaiApiKey,
-      GOOGLE_API_KEY: this.googleApiKey,
-      ANTHROPIC_API_KEY: this.anthropicApiKey,
-      AZURE_OPENAI_ENDPOINT: this.azureOpenaiEndpoint,
-      AZURE_OPENAI_API_KEY: this.azureOpenaiApiKey,
-      OPENAI_API_VERSION: this.azureOpenaiApiVersion,
       COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix,
       API_KEY_TABLE_NAME: apiKeyTable.tableName,
       SALT_SECRET: saltSecret.secretName,
