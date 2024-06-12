@@ -564,6 +564,19 @@ export class LlmGatewayStack extends cdk.Stack {
       llmGatewayAlbSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443));
     }
 
+    const llmGatewayEcsCluster = "LlmGateway"
+    const cluster = new ecs.Cluster(this, 'AppCluster', {
+      vpc,
+      clusterName: llmGatewayEcsCluster,
+      containerInsights:true,
+      
+    });
+
+    new cdk.CfnOutput(this, 'LlmgatewayEcsCluster', {
+      value: llmGatewayEcsCluster,
+      description: 'Name of the llmgateway ecs cluster'
+    });
+
     if (this.serverlessApi) {
       const lambdaRole = this.createLlmGatewayRole(
         "llmGatewayLambdaRole",
@@ -602,12 +615,6 @@ export class LlmGatewayStack extends cdk.Stack {
     }
     else {
       const llmGatewayEcsTask = "LlmGatewayApi"
-
-      const cluster = new ecs.Cluster(this, 'llmGatewayCluster', {
-        vpc,
-        clusterName: llmGatewayEcsTask,
-        containerInsights:true,
-      });
 
       const logGroup = new logs.LogGroup(this, 'llmGatewayLogGroup', {
         logGroupName: '/ecs/LlmGateway/Api',
@@ -836,7 +843,7 @@ export class LlmGatewayStack extends cdk.Stack {
     });
 
     //Replace api.apiEndpoint with the url of the application load balancer
-    this.setUpStreamlit(vpc, LlmGatewayUrl, api)
+    this.setUpStreamlit(cluster, vpc, LlmGatewayUrl, api)
   }
 
   createSaltSecret() : secretsmanager.Secret {
@@ -1136,15 +1143,7 @@ export class LlmGatewayStack extends cdk.Stack {
         });
   }
 
-  setUpStreamlit(vpc: ec2.Vpc, llmGatewayUrl: string, apiGatewayApi: apigw.RestApi) {
-    // Create ECS Cluster
-    const cluster = new ecs.Cluster(this, 'AppCluster', {
-      vpc,
-      clusterName: 'LlmGatewayUI',
-      containerInsights:true,
-      
-    });
-
+  setUpStreamlit(cluster: ecs.Cluster, vpc: ec2.Vpc, llmGatewayUrl: string, apiGatewayApi: apigw.RestApi) {
     const logGroup = new logs.LogGroup(this, 'AppLogGroup', {
       logGroupName: '/ecs/LlmGateway/StreamlitUI',
       removalPolicy: cdk.RemovalPolicy.DESTROY
@@ -1215,8 +1214,9 @@ export class LlmGatewayStack extends cdk.Stack {
 
     appSecurityGroup.addIngressRule(albSecurityGroup, ec2.Port.tcp(8501));
 
+    const llmGatewayUIEcsTask = "LlmGatewayUI"
     const service = new ecs.FargateService(this, 'Service', {
-      serviceName: "LlmGatewayUI",
+      serviceName: llmGatewayUIEcsTask,
       cluster,
       taskDefinition,
       desiredCount: 1,
@@ -1226,6 +1226,11 @@ export class LlmGatewayStack extends cdk.Stack {
         enable:true,
         rollback:true
       }
+    });
+
+    new cdk.CfnOutput(this, 'LlmgatewayUIEcsTask', {
+      value: llmGatewayUIEcsTask,
+      description: 'Name of the llmgateway ecs task'
     });
 
     const lb = new elbv2.ApplicationLoadBalancer(this, 'LB', {

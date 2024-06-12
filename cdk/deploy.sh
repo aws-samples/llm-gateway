@@ -126,6 +126,8 @@ if [ $? -eq 0 ]; then
     API_KEY_LAMBDA_FUNCTION_NAME=$(jq -r ".\"${STACK_NAME}\".ApiKeyLambdaFunctionName" ./outputs.json)
     LLM_GATEWAY_LAMBDA_FUNCTION=$(jq -r ".\"${STACK_NAME}\".LlmgatewayLambdaFunctionName" ./outputs.json)
     LLM_GATEWAY_ECS_TASK=$(jq -r ".\"${STACK_NAME}\".LlmgatewayEcsTask" ./outputs.json)
+    LLM_GATEWAY_UI_ECS_TASK=$(jq -r ".\"${STACK_NAME}\".LlmgatewayUIEcsTask" ./outputs.json)
+    LLM_GATEWAY_ECS_CLUSTER=$(jq -r ".\"${STACK_NAME}\".LlmgatewayEcsCluster" ./outputs.json)
     QUOTA_LAMBDA_FUNCTION_NAME=$(jq -r ".\"${STACK_NAME}\".QuotaLambdaFunctionName" ./outputs.json)
     MODEL_ACCESS_LAMBDA_FUNCTION_NAME=$(jq -r ".\"${STACK_NAME}\".ModelAccessLambdaFunctionName" ./outputs.json)
 
@@ -166,15 +168,15 @@ if [ $? -eq 0 ]; then
         --no-cli-pager
 
     aws ecs update-service \
-        --cluster LlmGatewayUI \
-        --service LlmGatewayUI \
+        --cluster $LLM_GATEWAY_ECS_CLUSTER \
+        --service $LLM_GATEWAY_UI_ECS_TASK \
         --force-new-deployment \
         --desired-count 1 \
         --no-cli-pager
 
     if [ -n "$LLM_GATEWAY_ECS_TASK" ] && [ "$LLM_GATEWAY_ECS_TASK" != "null" ]; then
         aws ecs update-service \
-            --cluster $LLM_GATEWAY_ECS_TASK \
+            --cluster $LLM_GATEWAY_ECS_CLUSTER \
             --service $LLM_GATEWAY_ECS_TASK \
             --force-new-deployment \
             --desired-count 1 \
