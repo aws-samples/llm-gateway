@@ -1,8 +1,5 @@
 FROM public.ecr.aws/lambda/python:3.12@sha256:c54348db9f790f6206b8d2208ae6950f6957e0aa3df14aa6f2975f2d63a4a2a9
 
-RUN useradd -d /home/username -m -s /bin/bash llm-user
-USER llm-user
-
 COPY requirements.txt ./requirements.txt
 RUN pip install -r requirements.txt --no-cache-dir
 

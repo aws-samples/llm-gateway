@@ -1,5 +1,4 @@
 import boto3
-import datetime
 import json
 import logging
 import os
@@ -7,7 +6,6 @@ from botocore.exceptions import ClientError
 from decimal import Decimal, DecimalException
 from collections import defaultdict
 from boto3.dynamodb.conditions import Key
-import requests
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -17,7 +15,6 @@ DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 # Chat history.
 QUOTA_TABLE_NAME = os.environ.get("QUOTA_TABLE_NAME", None)
 DEFAULT_QUOTA_PARAMETER_NAME = os.environ.get("DEFAULT_QUOTA_PARAMETER_NAME")
-COGNITO_DOMAIN_PREFIX = os.environ.get("COGNITO_DOMAIN_PREFIX")
 ssm_client = boto3.client("ssm")
 
 REGION = os.environ.get("REGION")
@@ -41,28 +38,6 @@ def get_default_quota():
     parameter_value = response['Parameter']['Value']
     default_quota_config_dict = json.loads(parameter_value)
     return default_quota_config_dict
-
-def get_user_name(authorization_header):
-    user_info = get_user_info_cognito(authorization_header)
-    user_name = user_info["preferred_username"]
-    return user_name
-
-def get_user_info_cognito(authorization_header):
-    url = f'https://{COGNITO_DOMAIN_PREFIX}.auth.{REGION}.amazoncognito.com/oauth2/userInfo'
-
-    # Set the headers with the access token
-    headers = {
-        'Authorization': authorization_header
-    }
-
-    # Make the HTTP GET request to the User Info endpoint
-    response = requests.get(url, headers=headers, timeout=60)
-
-    # Check if the request was successful
-    if response.status_code == 200:
-        return response.json()  # Returns the user info as a JSON object
-    else:
-        return response.status_code, response.text  # Returns error status and message if not successful
 
 def get_quota_summary(username, table, response):
     try:
@@ -137,6 +112,11 @@ def get_quota_summary(username, table, response):
                 "body": json.dumps({"message": str(e)})
             }
 
+def get_user_name(event):
+    username = event['requestContext']['authorizer']['username']
+    print(f'username: {username}')
+    return username
+
 def lambda_handler(event, context):
     """
     :param event: A dict that contains request data, query string parameters, and
@@ -167,8 +147,7 @@ def lambda_handler(event, context):
         if error:
             return error
     elif http_method == 'GET' and path == "/quota/currentusersummary":
-        authorization_header = headers["Authorization"]
-        username = get_user_name(authorization_header)
+        username = get_user_name(event)
         error = get_quota_summary(username, table, response)
         if error:
             return error
