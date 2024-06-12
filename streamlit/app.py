@@ -13,7 +13,7 @@ import os
 import requests
 from st_pages import Page, show_pages, Section, add_indentation, hide_pages
 
-region = os.environ["Region"] if "Region" in os.environ  else ""
+region = os.environ["Region"]
 cognito_domain_prefix = os.environ["CognitoDomainPrefix"] if "CognitoDomainPrefix" in os.environ  else ""
 cognito_client_id = os.environ["CognitoClientId"] if "CognitoClientId" in os.environ  else ""
 
