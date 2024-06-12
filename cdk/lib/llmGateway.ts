@@ -23,6 +23,7 @@ import * as route53 from "aws-cdk-lib/aws-route53";
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as targets from 'aws-cdk-lib/aws-elasticloadbalancingv2-targets';
 import * as ssm from "aws-cdk-lib/aws-ssm";
+import * as lambdaPython from '@aws-cdk/aws-lambda-python-alpha'
 
 /* At present, this repository supports:
  *  "ai21.j2-mid-v1": {},
@@ -685,20 +686,82 @@ export class LlmGatewayStack extends cdk.Stack {
       },
     });
 
-    this.createApiKeyHandlerApi(api, apiKeyTable, saltSecret, vpcParams, apiKeyEcr)
-    this.createQuotaHandlerApi(api, quotaTable, vpcParams, quotaEcr, defaultQuotaParameter)
-
-    //Need to have a second RestApi because we hit the max number of authorizers for one RestApi
-    //Need to have one authorizer per endpoint, because I was getting auth errors trying to reuse the same access token on the same authorizer but on a different endpoint. Not sure how else to fix that.
-    const apiModelAccess = new apigw.RestApi(this, "LlmGatewayApiGatewayModelAccess", {
-      defaultCorsPreflightOptions: {
-        allowOrigins: apigw.Cors.ALL_ORIGINS,
-        allowMethods: apigw.Cors.ALL_METHODS,  // Make sure POST is included
-        allowHeaders: ['Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'],
-        allowCredentials: true,
+    const authHandlerRole = new iam.Role(this, "AuthHandlerRole", {
+      assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
+      roleName: "AuthHandlerRole",
+      inlinePolicies: {
+        LambdaPermissions: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              sid: "WriteToCloudWatchLogs",
+              effect: iam.Effect.ALLOW,
+              actions: [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents",
+              ],
+              resources: ["*"],
+            }),
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                "secretsmanager:GetSecretValue",
+                "secretsmanager:DescribeSecret"
+              ],
+              resources: [saltSecret.secretArn]  // Restrict policy to this specific secret
+            }),
+            new iam.PolicyStatement({
+              sid: "HistoryDynamoDBAccess",
+              effect: iam.Effect.ALLOW,
+              actions: [
+                "dynamodb:BatchWriteItem",
+                "dynamodb:DeleteItem",
+                "dynamodb:GetItem",
+                "dynamodb:PutItem",
+                "dynamodb:Query",
+                "dynamodb:Scan",
+                "dynamodb:UpdateItem",
+              ],
+              resources: [apiKeyTable.tableArn, `${apiKeyTable.tableArn}/index/${this.apiKeyValueHashIndex}`],
+            })
+          ],
+        }),
       },
+    })
+
+    const nonAdminEndpoints = []
+
+    const authHandler = new lambdaPython.PythonFunction(this, 'AuthHandlerFunction', {
+      entry: path.join(__dirname, "../../lambdas/authorizer"),
+      index: 'app.py',
+      handler: 'handler',
+      runtime: lambda.Runtime.PYTHON_3_12,
+      architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
+      environment: {
+            USER_POOL_ID: this.userPool.userPoolId,
+            APP_CLIENT_ID: this.applicationLoadBalanceruserPoolClient.userPoolClientId,
+            ADMIN_LIST: this.adminList,
+            COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix,
+            REGION: this.regionValue,
+            NON_ADMIN_ENDPOINTS: "apikey,quota/currentusersummary,modelaccess/currentuser",
+            API_KEY_EXCLUDED_ENDPOINTS: "apikey",
+            SALT_SECRET: saltSecret.secretName,
+            API_KEY_TABLE_NAME: apiKeyTable.tableName
+          },
+      role: authHandlerRole
     });
-    this.createModelAccessHandlerApi(apiModelAccess, modelAccessTable, vpcParams, modelAccessEcr, defaultModelAccessParameter)
+
+    const authorizer = new apigw.TokenAuthorizer(this,
+      "Authorizer",
+      {
+        handler: authHandler,
+        identitySource: "method.request.header.Authorization",
+      },
+    )
+
+    this.createApiKeyHandlerApi(api, authorizer, apiKeyTable, saltSecret, vpcParams, apiKeyEcr)
+    this.createQuotaHandlerApi(api, authorizer, quotaTable, vpcParams, quotaEcr, defaultQuotaParameter)
+    this.createModelAccessHandlerApi(api, authorizer, modelAccessTable, vpcParams, modelAccessEcr, defaultModelAccessParameter)
 
     let llmGatewayAlb : elbv2.ApplicationLoadBalancer;
     if (this.llmGatewayIsPublic) {
@@ -773,7 +836,7 @@ export class LlmGatewayStack extends cdk.Stack {
     });
 
     //Replace api.apiEndpoint with the url of the application load balancer
-    this.setUpStreamlit(vpc, LlmGatewayUrl, api, apiModelAccess)
+    this.setUpStreamlit(vpc, LlmGatewayUrl, api)
   }
 
   createSaltSecret() : secretsmanager.Secret {
@@ -785,94 +848,7 @@ export class LlmGatewayStack extends cdk.Stack {
     });
   }
 
-  createModelAccessHandlerApi(api: apigw.RestApi, modelAccessTable: dynamodb.ITable, vpcParams: object, modelAccessEcr: ecr.IRepository, defaultModelAccessParameter:ssm.StringParameter){
-    const modelAccessAuthHandlerRole = new iam.Role(this, "ModelAccessAuthHandlerRole", {
-      assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
-      roleName: "ModelAccessAuthHandlerRole",
-      inlinePolicies: {
-        LambdaPermissions: new iam.PolicyDocument({
-          statements: [
-            new iam.PolicyStatement({
-              sid: "WriteToCloudWatchLogs",
-              effect: iam.Effect.ALLOW,
-              actions: [
-                "logs:CreateLogGroup",
-                "logs:CreateLogStream",
-                "logs:PutLogEvents",
-              ],
-              resources: ["*"],
-            }),
-          ],
-        }),
-      },
-    });
-
-    const authHandler = new lambdaNode.NodejsFunction(this, "AuthHandlerFunctionModelAccess", {
-      runtime: lambda.Runtime.NODEJS_20_X,
-      entry: path.join(__dirname, "authorizer/index.ts"),
-      architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
-      environment: {
-        USER_POOL_ID: this.userPool.userPoolId,
-        APP_CLIENT_ID: this.applicationLoadBalanceruserPoolClient.userPoolClientId,
-        ADMIN_ONLY: "true",
-        ADMIN_LIST: this.adminList,
-        COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix,
-        REGION: this.regionValue
-      },
-      bundling: {
-        minify: false,
-      },
-      role: modelAccessAuthHandlerRole
-    });
-
-    const authHandlerNonAdmin = new lambdaNode.NodejsFunction(this, "AuthHandlerFunctionNonAdminModelAccess", {
-      runtime: lambda.Runtime.NODEJS_20_X,
-      entry: path.join(__dirname, "authorizer/index.ts"),
-      architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
-      environment: {
-        USER_POOL_ID: this.userPool.userPoolId,
-        APP_CLIENT_ID: this.applicationLoadBalanceruserPoolClient.userPoolClientId,
-        COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix,
-        REGION: this.regionValue
-      },
-      bundling: {
-        minify: false,
-      },
-      role: modelAccessAuthHandlerRole
-    });
-
-    const modelAccessAuthorizerGet = new apigw.TokenAuthorizer(this,
-      "ModelAccessAuthorizerGet",
-      {
-        handler: authHandler,
-        identitySource: "method.request.header.Authorization",
-      },
-    )
-
-    const modelAccessAuthorizerGetNonAdmin = new apigw.TokenAuthorizer(this,
-      "ModelAccessAuthorizerGetSummaryNonAdmin",
-      {
-        handler: authHandlerNonAdmin,
-        identitySource: "method.request.header.Authorization",
-      },
-    )
-
-    const modelAccessAuthorizerPost = new apigw.TokenAuthorizer(this,
-      "ModelAccessAuthorizerPost",
-      {
-        handler: authHandler,
-        identitySource: "method.request.header.Authorization",
-      },
-    )
-
-    const modelAccessAuthorizerDelete = new apigw.TokenAuthorizer(this,
-      "ModelAccessAuthorizerDelete",
-      {
-        handler: authHandler,
-        identitySource: "method.request.header.Authorization",
-      },
-    )
-
+  createModelAccessHandlerApi(api: apigw.RestApi, authorizer: apigw.TokenAuthorizer, modelAccessTable: dynamodb.ITable, vpcParams: object, modelAccessEcr: ecr.IRepository, defaultModelAccessParameter:ssm.StringParameter){
     const modelAccessHandler = new lambda.DockerImageFunction(this, 'modelAccessHandler', {
       functionName: this.modelAccessHandlerFunctionName,
       code: lambda.DockerImageCode.fromEcr(modelAccessEcr, { tag: "latest" }),
@@ -893,7 +869,7 @@ export class LlmGatewayStack extends cdk.Stack {
 
     // Add GET endpoint
     modelAccessResource.addMethod('GET', new apigw.LambdaIntegration(modelAccessHandler), {
-      authorizer: modelAccessAuthorizerGet
+      authorizer: authorizer
     });
 
     // Add a new resource for the currentuser under modelaccess
@@ -901,17 +877,17 @@ export class LlmGatewayStack extends cdk.Stack {
 
     // Add GET method for the /modelaccess/currentusersummary endpoint
     currentuserResource.addMethod('GET', new apigw.LambdaIntegration(modelAccessHandler), {
-      authorizer: modelAccessAuthorizerGetNonAdmin
+      authorizer: authorizer
     });
 
     // Add POST endpoint
     modelAccessResource.addMethod('POST', new apigw.LambdaIntegration(modelAccessHandler), {
-      authorizer: modelAccessAuthorizerPost
+      authorizer: authorizer
     });
 
     // Add DELETE endpoint
     modelAccessResource.addMethod('DELETE', new apigw.LambdaIntegration(modelAccessHandler), {
-      authorizer: modelAccessAuthorizerDelete
+      authorizer: authorizer
     });
 
     new cdk.CfnOutput(this, 'ModelAccessLambdaFunctionName', {
@@ -922,101 +898,7 @@ export class LlmGatewayStack extends cdk.Stack {
     return api
   }
 
-  createQuotaHandlerApi(api: apigw.RestApi, quotaTable: dynamodb.ITable, vpcParams: object, quotaHandlerEcr: ecr.IRepository, defaultQuotaParameter:ssm.StringParameter) {
-    const quotaAuthHandlerRole = new iam.Role(this, "QuotaAuthHandlerRole", {
-      assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
-      roleName: "QuotaAuthHandlerRole",
-      inlinePolicies: {
-        LambdaPermissions: new iam.PolicyDocument({
-          statements: [
-            new iam.PolicyStatement({
-              sid: "WriteToCloudWatchLogs",
-              effect: iam.Effect.ALLOW,
-              actions: [
-                "logs:CreateLogGroup",
-                "logs:CreateLogStream",
-                "logs:PutLogEvents",
-              ],
-              resources: ["*"],
-            }),
-          ],
-        }),
-      },
-    })
-    
-    const authHandler = new lambdaNode.NodejsFunction(this, "AuthHandlerFunctionQuota", {
-      runtime: lambda.Runtime.NODEJS_20_X,
-      entry: path.join(__dirname, "authorizer/index.ts"),
-      architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
-      environment: {
-        USER_POOL_ID: this.userPool.userPoolId,
-        APP_CLIENT_ID: this.applicationLoadBalanceruserPoolClient.userPoolClientId,
-        ADMIN_ONLY: "true",
-        ADMIN_LIST: this.adminList,
-        COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix,
-        REGION: this.regionValue
-      },
-      bundling: {
-        minify: false,
-      },
-      role: quotaAuthHandlerRole
-    });
-
-    const authHandlerNonAdmin = new lambdaNode.NodejsFunction(this, "AuthHandlerFunctionNonAdminQuota", {
-      runtime: lambda.Runtime.NODEJS_20_X,
-      entry: path.join(__dirname, "authorizer/index.ts"),
-      architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
-      environment: {
-        USER_POOL_ID: this.userPool.userPoolId,
-        APP_CLIENT_ID: this.applicationLoadBalanceruserPoolClient.userPoolClientId,
-        COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix,
-        REGION: this.regionValue
-      },
-      bundling: {
-        minify: false,
-      },
-      role: quotaAuthHandlerRole
-    });
-
-    const quotaAuthorizerGet = new apigw.TokenAuthorizer(this,
-      "QuotaAuthorizerGet",
-      {
-        handler: authHandler,
-        identitySource: "method.request.header.Authorization",
-      },
-    )
-
-    const quotaAuthorizerGetSummary = new apigw.TokenAuthorizer(this,
-      "QuotaAuthorizerGetSummary",
-      {
-        handler: authHandler,
-        identitySource: "method.request.header.Authorization",
-      },
-    )
-
-    const quotaAuthorizerGetSummaryNonAdmin = new apigw.TokenAuthorizer(this,
-      "QuotaAuthorizerGetSummaryNonAdmin",
-      {
-        handler: authHandlerNonAdmin,
-        identitySource: "method.request.header.Authorization",
-      },
-    )
-
-    const quotaAuthorizerPost = new apigw.TokenAuthorizer(this,
-      "QuotaAuthorizerPost",
-      {
-        handler: authHandler,
-        identitySource: "method.request.header.Authorization",
-      },
-    )
-
-    const quotaAuthorizerDelete = new apigw.TokenAuthorizer(this,
-      "QuotaAuthorizerDelete",
-      {
-        handler: authHandler,
-        identitySource: "method.request.header.Authorization",
-      },
-    )
+  createQuotaHandlerApi(api: apigw.RestApi, authorizer: apigw.TokenAuthorizer, quotaTable: dynamodb.ITable, vpcParams: object, quotaHandlerEcr: ecr.IRepository, defaultQuotaParameter:ssm.StringParameter) {
 
     const quotaHandler = new lambda.DockerImageFunction(this, 'quotaHandler', {
       functionName: this.quotaHandlerFunctionName,
@@ -1038,7 +920,7 @@ export class LlmGatewayStack extends cdk.Stack {
 
     // Add GET endpoint
     quotaResource.addMethod('GET', new apigw.LambdaIntegration(quotaHandler), {
-      authorizer: quotaAuthorizerGet
+      authorizer: authorizer
     });
 
     // Add a new resource for the summary under quota
@@ -1049,22 +931,22 @@ export class LlmGatewayStack extends cdk.Stack {
 
     // Add GET method for the /quota/summary endpoint
     summaryResource.addMethod('GET', new apigw.LambdaIntegration(quotaHandler), {
-        authorizer: quotaAuthorizerGetSummary
+        authorizer: authorizer
     });
 
     // Add GET method for the /quota/currentusersummary endpoint
     currentusersummaryResource.addMethod('GET', new apigw.LambdaIntegration(quotaHandler), {
-      authorizer: quotaAuthorizerGetSummaryNonAdmin
+      authorizer: authorizer
     });
 
     // Add POST endpoint
     quotaResource.addMethod('POST', new apigw.LambdaIntegration(quotaHandler), {
-      authorizer: quotaAuthorizerPost
+      authorizer: authorizer
     });
 
     // Add DELETE endpoint
     quotaResource.addMethod('DELETE', new apigw.LambdaIntegration(quotaHandler), {
-      authorizer: quotaAuthorizerDelete
+      authorizer: authorizer
     });
 
     new cdk.CfnOutput(this, 'QuotaLambdaFunctionName', {
@@ -1076,64 +958,7 @@ export class LlmGatewayStack extends cdk.Stack {
 
   }
 
-  createApiKeyHandlerApi(api: apigw.RestApi, apiKeyTable: dynamodb.ITable, saltSecret: secretsmanager.ISecret, vpcParams: object, apiKeyEcr: ecr.IRepository) : apigw.RestApi {
-    const authHandler = new lambdaNode.NodejsFunction(this, "AuthHandlerFunction", {
-      runtime: lambda.Runtime.NODEJS_20_X,
-      entry: path.join(__dirname, "authorizer/index.ts"),
-      architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
-      environment: {
-        USER_POOL_ID: this.userPool.userPoolId,
-        APP_CLIENT_ID: this.applicationLoadBalanceruserPoolClient.userPoolClientId,
-      },
-      bundling: {
-        minify: false,
-      },
-      role: new iam.Role(this, "AuthHandlerRole", {
-        assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
-        roleName: "AuthHandlerRole",
-        inlinePolicies: {
-          LambdaPermissions: new iam.PolicyDocument({
-            statements: [
-              new iam.PolicyStatement({
-                sid: "WriteToCloudWatchLogs",
-                effect: iam.Effect.ALLOW,
-                actions: [
-                  "logs:CreateLogGroup",
-                  "logs:CreateLogStream",
-                  "logs:PutLogEvents",
-                ],
-                resources: ["*"],
-              }),
-            ],
-          }),
-        },
-      })
-    });
-
-    const apiKeyAuthorizerGet = new apigw.TokenAuthorizer(this,
-      "ApiKeyAuthorizerGet",
-      {
-        handler: authHandler,
-        identitySource: "method.request.header.Authorization",
-      },
-    )
-
-    const apiKeyAuthorizerPost = new apigw.TokenAuthorizer(this,
-      "ApiKeyAuthorizerPost",
-      {
-        handler: authHandler,
-        identitySource: "method.request.header.Authorization",
-      },
-    )
-
-    const apiKeyAuthorizerDelete = new apigw.TokenAuthorizer(this,
-      "ApiKeyAuthorizerDelete",
-      {
-        handler: authHandler,
-        identitySource: "method.request.header.Authorization",
-      },
-    )
-
+  createApiKeyHandlerApi(api: apigw.RestApi, authorizer: apigw.TokenAuthorizer, apiKeyTable: dynamodb.ITable, saltSecret: secretsmanager.ISecret, vpcParams: object, apiKeyEcr: ecr.IRepository) : apigw.RestApi {
     const apiKeyHandler = new lambda.DockerImageFunction(this, 'apiKeyHandler', {
       functionName: this.apiKeyHandlerFunctionName,
       code: lambda.DockerImageCode.fromEcr(apiKeyEcr, { tag: "latest" }),
@@ -1154,17 +979,17 @@ export class LlmGatewayStack extends cdk.Stack {
 
     // Add GET endpoint
     apiKeyResource.addMethod('GET', new apigw.LambdaIntegration(apiKeyHandler), {
-      authorizer: apiKeyAuthorizerGet
+      authorizer: authorizer
     });
 
     // Add POST endpoint
     apiKeyResource.addMethod('POST', new apigw.LambdaIntegration(apiKeyHandler), {
-      authorizer: apiKeyAuthorizerPost
+      authorizer: authorizer
     });
 
     // Add DELETE endpoint
     apiKeyResource.addMethod('DELETE', new apigw.LambdaIntegration(apiKeyHandler), {
-      authorizer: apiKeyAuthorizerDelete
+      authorizer: authorizer
     });
 
     new cdk.CfnOutput(this, 'ApiKeyLambdaFunctionName', {
@@ -1311,7 +1136,7 @@ export class LlmGatewayStack extends cdk.Stack {
         });
   }
 
-  setUpStreamlit(vpc: ec2.Vpc, llmGatewayUrl: string, apiGatewayApi: apigw.RestApi, apiGatewayModelAccessApi: apigw.RestApi) {
+  setUpStreamlit(vpc: ec2.Vpc, llmGatewayUrl: string, apiGatewayApi: apigw.RestApi) {
     // Create ECS Cluster
     const cluster = new ecs.Cluster(this, 'AppCluster', {
       vpc,
@@ -1354,7 +1179,6 @@ export class LlmGatewayStack extends cdk.Stack {
       environment: {
         LlmGatewayUrl: llmGatewayUrl,
         ApiGatewayURL: apiGatewayApi.url,
-        ApiGatewayModelAccessURL: apiGatewayModelAccessApi.url,
         AdminList: this.adminList,
         Region: this.regionValue,
         CognitoDomainPrefix: this.cognitoDomainPrefix,

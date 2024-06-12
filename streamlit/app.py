@@ -44,7 +44,7 @@ if "estimated_usage" not in st.session_state:
 quota_limit = 0.1000
 is_streaming = False
 QuotaURL = os.environ["ApiGatewayURL"] + "quota" + "/currentusersummary"
-ModelAccessURL = os.environ["ApiGatewayModelAccessURL"] + "modelaccess" + "/currentuser"
+ModelAccessURL = os.environ["ApiGatewayURL"] + "modelaccess" + "/currentuser"
 
 ################################################################################
 # BEGIN - Lambda code - This needs to be migrated to the cloud

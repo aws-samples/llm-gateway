@@ -23,7 +23,7 @@ show_pages(
 )
 add_indentation()
 
-ModelAccessURL = os.environ["ApiGatewayModelAccessURL"] + "modelaccess"
+ModelAccessURL = os.environ["ApiGatewayURL"] + "modelaccess"
 region = os.environ["Region"]
 
 #map for us-east-1, us-west-2, ap-south-1, 

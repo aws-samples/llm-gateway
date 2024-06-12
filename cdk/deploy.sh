@@ -88,12 +88,6 @@ cd ../streamlit
 #navigate back to the original directory
 cd -
 
-cd lib/authorizer
-npm ci
-
-#navigate back to the original directory
-cd -
-
 # Deploy the CDK stack
 echo "Deploying the CDK stack..."
 cdk deploy "$STACK_NAME" \
