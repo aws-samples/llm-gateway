@@ -46,7 +46,7 @@ SALT = get_salt()
 
 def get_user_name(authorization_header):
     user_info = get_user_info_cognito(authorization_header)
-    user_name = user_info["preferred_username"]
+    user_name = user_info["preferred_username"] if 'preferred_username' in user_info["preferred_username"]  else user_info["username"]
     return user_name
 
 def get_user_info_cognito(authorization_header):

@@ -51,9 +51,10 @@ class Settings:
 ## END NETWORK ANALYSIS ########################################################
 ## BEGIN WEBSOCKETS ############################################################
 
-def get_username(authorization_header):
-    user_info = get_user_info(authorization_header)
-    return user_info["preferred_username"]
+def get_user_name(event):
+    username = event['requestContext']['authorizer']['username']
+    print(f'username: {username}')
+    return username
 
 def get_user_info(authorization_header):
     url = f'https://{COGNITO_DOMAIN_PREFIX}.auth.{REGION}.amazoncognito.com/oauth2/userInfo'
@@ -123,8 +124,7 @@ def lambda_handler(event, context):
                 "body": json.dumps({"message": str("Unexpected lack of authorization header.")})
             }
     else:
-        authorization_header = headers["Authorization"]
-        username = get_username(authorization_header)
+        username = get_user_name(event)
 
     response = {"statusCode": 200}
 
