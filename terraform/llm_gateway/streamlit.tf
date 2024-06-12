@@ -59,7 +59,7 @@ module "streamlit" {
           value =  "${aws_api_gateway_stage.llm_gateway_rest_api_stage.invoke_url}/"
         },
         {
-          name  = "REGION"
+          name  = "Region"
           value = local.region
         },
         {

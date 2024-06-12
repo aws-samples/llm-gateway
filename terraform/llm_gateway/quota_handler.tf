@@ -12,7 +12,7 @@ resource "aws_security_group" "llm_gateway_rest_quota_authorizer_lambda_function
 }
 
 
-module "llm_gateway_rest_quota_authorizer_function" {
+module "llm_gateway_rest_quota_admin_authorizer_function" {
 
   source        = "terraform-aws-modules/lambda/aws"
   version = "7.5.0"
@@ -21,7 +21,7 @@ module "llm_gateway_rest_quota_authorizer_function" {
   handler       = "index.handler"
   runtime       = "nodejs20.x"
   create_layer  = false
-  function_name = join("", [local.name,"-quota-authorizer"  ])
+  function_name = join("", [local.name,"-quota-admin-authorizer"  ])
   architectures    = [local.architectures]
 
   vpc_subnet_ids = module.vpc.private_subnets
@@ -247,13 +247,14 @@ module "llm_gateway_rest_quota_handler" {
 }
 
 # Create Cognito User pool Authorizer
-resource "aws_api_gateway_authorizer" "llm_gateway_rest_quota_authorizer" {
+resource "aws_api_gateway_authorizer" "llm_gateway_rest_quota_admin_authorizer" {
 
   identity_source = "method.request.header.Authorization"
-  name = "${local.name}-Quota-Authorizer"
+  name = "${local.name}-Quota-admin-Authorizer"
   type = "TOKEN"
-  authorizer_result_ttl_in_seconds = 0
-  authorizer_uri = module.llm_gateway_rest_quota_authorizer_function.lambda_function_invoke_arn
+  authorizer_result_ttl_in_seconds = local.authorizer_result_ttl_in_seconds
+
+  authorizer_uri = module.llm_gateway_rest_quota_admin_authorizer_function.lambda_function_invoke_arn
   rest_api_id = aws_api_gateway_rest_api.llm_gateway_rest_api.id
 }
 
@@ -263,7 +264,8 @@ resource "aws_api_gateway_authorizer" "llm_gateway_rest_quota_non_admin_authoriz
   identity_source = "method.request.header.Authorization"
   name = "${local.name}-Quota-non-admin-Authorizer"
   type = "TOKEN"
-  authorizer_result_ttl_in_seconds = 0
+  authorizer_result_ttl_in_seconds = local.authorizer_result_ttl_in_seconds
+
   authorizer_uri = module.llm_gateway_rest_quota_non_admin_authorizer_function.lambda_function_invoke_arn
   rest_api_id = aws_api_gateway_rest_api.llm_gateway_rest_api.id
 
@@ -274,6 +276,7 @@ resource "aws_api_gateway_resource" "llm_gateway_rest_quota_resource" {
   path_part   = "quota"
   rest_api_id = aws_api_gateway_rest_api.llm_gateway_rest_api.id
 }
+
 
 resource "aws_api_gateway_resource" "llm_gateway_rest_quota_summary_resource" {
   parent_id   = aws_api_gateway_resource.llm_gateway_rest_quota_resource.id
@@ -289,7 +292,7 @@ resource "aws_api_gateway_resource" "llm_gateway_rest_quota_current_user_summary
 
 resource "aws_api_gateway_method" "llm_gateway_rest_quota_method_get" {
   authorization = "CUSTOM"
-  authorizer_id = aws_api_gateway_authorizer.llm_gateway_rest_quota_authorizer.id
+  authorizer_id = aws_api_gateway_authorizer.llm_gateway_rest_quota_admin_authorizer.id
   http_method   = "GET"
   resource_id   = aws_api_gateway_resource.llm_gateway_rest_quota_resource.id
   rest_api_id   = aws_api_gateway_rest_api.llm_gateway_rest_api.id
@@ -297,7 +300,7 @@ resource "aws_api_gateway_method" "llm_gateway_rest_quota_method_get" {
 
 resource "aws_api_gateway_method" "llm_gateway_rest_quota_method_post" {
   authorization = "CUSTOM"
-  authorizer_id = aws_api_gateway_authorizer.llm_gateway_rest_quota_authorizer.id
+  authorizer_id = aws_api_gateway_authorizer.llm_gateway_rest_quota_admin_authorizer.id
   http_method   = "POST"
   resource_id   = aws_api_gateway_resource.llm_gateway_rest_quota_resource.id
   rest_api_id   = aws_api_gateway_rest_api.llm_gateway_rest_api.id
@@ -305,7 +308,7 @@ resource "aws_api_gateway_method" "llm_gateway_rest_quota_method_post" {
 
 resource "aws_api_gateway_method" "llm_gateway_rest_quota_method_delete" {
   authorization = "CUSTOM"
-  authorizer_id = aws_api_gateway_authorizer.llm_gateway_rest_quota_authorizer.id
+  authorizer_id = aws_api_gateway_authorizer.llm_gateway_rest_quota_admin_authorizer.id
   http_method   = "DELETE"
   resource_id   = aws_api_gateway_resource.llm_gateway_rest_quota_resource.id
   rest_api_id   = aws_api_gateway_rest_api.llm_gateway_rest_api.id
@@ -313,7 +316,7 @@ resource "aws_api_gateway_method" "llm_gateway_rest_quota_method_delete" {
 
 resource "aws_api_gateway_method" "llm_gateway_rest_quota_method_summary" {
   authorization = "CUSTOM"
-  authorizer_id = aws_api_gateway_authorizer.llm_gateway_rest_quota_authorizer.id
+  authorizer_id = aws_api_gateway_authorizer.llm_gateway_rest_quota_admin_authorizer.id
   http_method   = "GET"
   resource_id   = aws_api_gateway_resource.llm_gateway_rest_quota_summary_resource.id
   rest_api_id   = aws_api_gateway_rest_api.llm_gateway_rest_api.id
