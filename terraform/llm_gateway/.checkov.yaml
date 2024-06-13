@@ -1,0 +1,5 @@
+skip-check:
+  - CKV_TF_1 #Skip terraform commit hash warning. Using version number.
+  - CKV_SECRET_6 # The High entropy string is for the local variable not value.
+  - CKV_AWS_73  # Xray is not enabled on purpose
+  - CKV_AWS_120 # Api Caching is not enabled on purpose
