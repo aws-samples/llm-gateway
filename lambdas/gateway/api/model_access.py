@@ -1,3 +1,4 @@
+from typing import List
 from fastapi import HTTPException, status
 import datetime
 import os
@@ -20,6 +21,17 @@ dynamodb = boto3.resource('dynamodb')
 model_access_table = dynamodb.Table(MODEL_ACCESS_TABLE_NAME)
 
 def check_model_access(user_name, api_key_name, model_id):
+    allowed_models_list = get_allowed_model_list(user_name)
+    print(f'model_id: {model_id} allowed_models_list: {allowed_models_list}')
+    if model_id not in allowed_models_list:
+        create_request_detail(user_name, api_key_name, None, None, None, model_id, "Model Access Denied")
+        raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN, detail=f"User does not have access to selected model"
+                    )
+    print(f'User has access to model. Processing request.')
+
+
+def get_allowed_model_list(user_name) -> List[str]:
     print('Checking if user has has access to model')
     model_access_config = get_from_cache(user_name)
 
@@ -43,15 +55,7 @@ def check_model_access(user_name, api_key_name, model_id):
     else:
         print(f'Found cached model access config: {model_access_config}')
     
-    allowed_models_list = model_access_config["model_access_list"].split(",")
-    print(f'model_id: {model_id} allowed_models_list: {allowed_models_list}')
-    if model_id not in allowed_models_list:
-        create_request_detail(user_name, api_key_name, None, None, None, model_id, "Model Access Denied")
-        raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN, detail=f"User does not have access to selected model"
-                    )
-    print(f'User has access to model. Processing request.')
-
+    return model_access_config["model_access_list"].split(",")
 
 def get_user_model_access_config(user_name):
     response = model_access_table.query(
