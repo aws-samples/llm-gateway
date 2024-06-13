@@ -47,6 +47,10 @@ anthropic.claude-v2.1,output,ap-northeast-1,0.024
 anthropic.claude-v2.1,output,eu-central-1,0.024
 anthropic.claude-v2.1,output,us-east-1,0.024
 anthropic.claude-v2.1,output,us-west-2,0.024
+cohere.embed-multilingual-v3,input,,0.0001
+cohere.embed-multilingual-v3,output,,0.0
+cohere.embed-english-v3,input,,0.0001
+cohere.embed-english-v3,output,,0.0
 cohere.command,input,,0.0015
 cohere.command,output,,0.002
 cohere.command-light,input,,0.0003

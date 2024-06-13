@@ -21,8 +21,12 @@ secrets_manager_client = boto3.client("secretsmanager")
 def api_key_auth(
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)]
 ):
+    bearer_token = credentials.credentials
     try:
-        user_name = get_user_name(credentials.credentials)
+        if bearer_token.startswith("sk-"):
+            user_name = get_user_name_api_key(bearer_token)
+        else:
+            user_name = get_user_name(bearer_token)
         print(f'Found user_name {user_name}. Access granted.')
         return user_name
     except Exception as e:
@@ -86,13 +90,10 @@ def query_by_api_key_hash(api_key_hash):
         return None
     
 def get_user_name(authorization_header):
-    try:
-        user_info = get_user_info_cognito(authorization_header)
-        user_name = user_info["preferred_username"] if 'preferred_username' in user_info["preferred_username"]  else user_info["username"]
-        return user_name
-    except:
-        user_name = get_user_name_api_key(authorization_header)
-        return user_name
+    user_info = get_user_info_cognito(authorization_header)
+    print(f'user_info: {user_info}')
+    user_name = user_info["preferred_username"] if 'preferred_username' in user_info else user_info["username"]
+    return user_name
 
 def hash_api_key(api_key_value):
     """
@@ -135,4 +136,4 @@ def get_user_info_cognito(authorization_header):
     if response.status_code == 200:
         return response.json()  # Returns the user info as a JSON object
     else:
-        return response.status_code, response.text  # Returns error status and message if not successful
+        raise Exception(f"Error validating cognito token: {response}")

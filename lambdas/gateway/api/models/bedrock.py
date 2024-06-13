@@ -828,12 +828,25 @@ class CohereEmbeddingsModel(BedrockEmbeddingsModel):
         }
         return args
 
-    def embed(self, embeddings_request: EmbeddingsRequest) -> EmbeddingsResponse:
+    def embed(self, embeddings_request: EmbeddingsRequest, user_name:str, api_key_name:str) -> EmbeddingsResponse:
         response = self._invoke_model(
             args=self._parse_args(embeddings_request), model_id=embeddings_request.model
         )
         response_body = json.loads(response.get("body").read())
 
+        if isinstance(embeddings_request.input, list):
+            # If it is a list, sum the lengths of all strings in the list
+            total_length = sum(len(item) for item in embeddings_request.input)
+        else:
+            # If it is a single string, get its length
+            total_length = len(embeddings_request.input)
+
+        #This model does not return the amount of tokens used. A rough estimate is characters divided by 4. Also, there is no charge for output tokens for embeddings models
+        estimated_token_amount = total_length // 4
+        input_cost = calculate_input_cost(estimated_token_amount, embeddings_request.model)
+
+        update_quota(user_name, input_cost)
+        create_request_detail(user_name, api_key_name, input_cost, estimated_token_amount, 0.0, embeddings_request.model, "Success")
         return self._create_response(
             embeddings=response_body["embeddings"],
             model=embeddings_request.model,
@@ -867,7 +880,7 @@ class TitanEmbeddingsModel(BedrockEmbeddingsModel):
             )
         return args
 
-    def embed(self, embeddings_request: EmbeddingsRequest) -> EmbeddingsResponse:
+    def embed(self, embeddings_request: EmbeddingsRequest, user_name:str, api_key_name:str) -> EmbeddingsResponse:
         response = self._invoke_model(
             args=self._parse_args(embeddings_request), model_id=embeddings_request.model
         )
