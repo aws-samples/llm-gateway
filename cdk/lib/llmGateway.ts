@@ -87,6 +87,9 @@ export class LlmGatewayStack extends cdk.Stack {
   requestDetailsTablePartitionKey = "username";
   requestDetailsTableSortKey = "timestamp";
 
+  nonAdminEndpoints = "/apikey,/quota/currentusersummary,/modelaccess/currentuser"
+  apiKeyExcludedEndpoints = "/apikey"
+
   userPool: cognito.IUserPool;
   applicationLoadBalanceruserPoolClient: cognito.IUserPoolClient;
   cognitoDomain: cognito.IUserPoolDomain
@@ -336,7 +339,10 @@ export class LlmGatewayStack extends cdk.Stack {
   createQuotaLambdaRole(
     roleName: string, 
     quotaTable: dynamodb.ITable,
-    defaultQuotaParameter:ssm.StringParameter
+    defaultQuotaParameter:ssm.StringParameter,
+    apiKeyTable: dynamodb.ITable,
+    apiKeyValueHashIndex: string,
+    secret: secretsmanager.ISecret
   ) {
     return new iam.Role(this, roleName, {
       assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
@@ -356,7 +362,15 @@ export class LlmGatewayStack extends cdk.Stack {
                 "dynamodb:Scan",
                 "dynamodb:UpdateItem",
               ],
-              resources: [quotaTable.tableArn],
+              resources: [quotaTable.tableArn, apiKeyTable.tableArn, `${apiKeyTable.tableArn}/index/${apiKeyValueHashIndex}`],
+            }),
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                "secretsmanager:GetSecretValue",
+                "secretsmanager:DescribeSecret"
+              ],
+              resources: [secret.secretArn]  // Restrict policy to this specific secret
             }),
             new iam.PolicyStatement({
               sid: "WriteToCloudWatchLogs",
@@ -382,7 +396,10 @@ export class LlmGatewayStack extends cdk.Stack {
   createModelAccessLambdaRole(
     roleName: string, 
     modelAccessTable: dynamodb.ITable,
-    defaultModelAccessParameter:ssm.StringParameter
+    defaultModelAccessParameter:ssm.StringParameter,
+    apiKeyTable: dynamodb.ITable,
+    apiKeyValueHashIndex: string,
+    secret: secretsmanager.ISecret
   ) {
     return new iam.Role(this, roleName, {
       assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
@@ -402,7 +419,15 @@ export class LlmGatewayStack extends cdk.Stack {
                 "dynamodb:Scan",
                 "dynamodb:UpdateItem",
               ],
-              resources: [modelAccessTable.tableArn],
+              resources: [modelAccessTable.tableArn, apiKeyTable.tableArn, `${apiKeyTable.tableArn}/index/${apiKeyValueHashIndex}`],
+            }),
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: [
+                "secretsmanager:GetSecretValue",
+                "secretsmanager:DescribeSecret"
+              ],
+              resources: [secret.secretArn]  // Restrict policy to this specific secret
             }),
             new iam.PolicyStatement({
               sid: "WriteToCloudWatchLogs",
@@ -750,8 +775,8 @@ export class LlmGatewayStack extends cdk.Stack {
             ADMIN_LIST: this.adminList,
             COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix,
             REGION: this.regionValue,
-            NON_ADMIN_ENDPOINTS: "apikey,quota/currentusersummary,modelaccess/currentuser",
-            API_KEY_EXCLUDED_ENDPOINTS: "apikey",
+            NON_ADMIN_ENDPOINTS: this.nonAdminEndpoints,
+            API_KEY_EXCLUDED_ENDPOINTS: this.apiKeyExcludedEndpoints,
             SALT_SECRET: saltSecret.secretName,
             API_KEY_TABLE_NAME: apiKeyTable.tableName
           },
@@ -767,8 +792,8 @@ export class LlmGatewayStack extends cdk.Stack {
     )
 
     this.createApiKeyHandlerApi(api, authorizer, apiKeyTable, saltSecret, vpcParams, apiKeyEcr)
-    this.createQuotaHandlerApi(api, authorizer, quotaTable, vpcParams, quotaEcr, defaultQuotaParameter)
-    this.createModelAccessHandlerApi(api, authorizer, modelAccessTable, vpcParams, modelAccessEcr, defaultModelAccessParameter)
+    this.createQuotaHandlerApi(api, authorizer, apiKeyTable, saltSecret, quotaTable, vpcParams, quotaEcr, defaultQuotaParameter)
+    this.createModelAccessHandlerApi(api, authorizer, apiKeyTable, saltSecret, modelAccessTable, vpcParams, modelAccessEcr, defaultModelAccessParameter)
 
     let llmGatewayAlb : elbv2.ApplicationLoadBalancer;
     if (this.llmGatewayIsPublic) {
@@ -858,17 +883,24 @@ export class LlmGatewayStack extends cdk.Stack {
     });
   }
 
-  createModelAccessHandlerApi(api: apigw.RestApi, authorizer: apigw.TokenAuthorizer, modelAccessTable: dynamodb.ITable, vpcParams: object, modelAccessEcr: ecr.IRepository, defaultModelAccessParameter:ssm.StringParameter){
+  createModelAccessHandlerApi(api: apigw.RestApi, authorizer: apigw.TokenAuthorizer, apiKeyTable: dynamodb.ITable, saltSecret: secretsmanager.ISecret, modelAccessTable: dynamodb.ITable, vpcParams: object, modelAccessEcr: ecr.IRepository, defaultModelAccessParameter:ssm.StringParameter){
     const modelAccessHandler = new lambda.DockerImageFunction(this, 'modelAccessHandler', {
       functionName: this.modelAccessHandlerFunctionName,
       code: lambda.DockerImageCode.fromEcr(modelAccessEcr, { tag: "latest" }),
-      role: this.createModelAccessLambdaRole("modelAccessHandlerRole", modelAccessTable, defaultModelAccessParameter),
+      role: this.createModelAccessLambdaRole("modelAccessHandlerRole", modelAccessTable, defaultModelAccessParameter, apiKeyTable, this.apiKeyValueHashIndex, saltSecret),
       architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
       environment: {
         REGION: this.regionValue,
         MODEL_ACCESS_TABLE_NAME: modelAccessTable.tableName,
         DEFAULT_MODEL_ACCESS_PARAMETER_NAME: defaultModelAccessParameter.parameterName,
-        COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix
+        COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix,
+        NON_ADMIN_ENDPOINTS: this.nonAdminEndpoints,
+        API_KEY_EXCLUDED_ENDPOINTS: this.apiKeyExcludedEndpoints,
+        USER_POOL_ID: this.userPool.userPoolId,
+        APP_CLIENT_ID: this.applicationLoadBalanceruserPoolClient.userPoolClientId,
+        ADMIN_LIST: this.adminList,
+        SALT_SECRET: saltSecret.secretName,
+        API_KEY_TABLE_NAME: apiKeyTable.tableName
       },
       timeout: cdk.Duration.minutes(15),
       memorySize: 512,
@@ -908,18 +940,25 @@ export class LlmGatewayStack extends cdk.Stack {
     return api
   }
 
-  createQuotaHandlerApi(api: apigw.RestApi, authorizer: apigw.TokenAuthorizer, quotaTable: dynamodb.ITable, vpcParams: object, quotaHandlerEcr: ecr.IRepository, defaultQuotaParameter:ssm.StringParameter) {
+  createQuotaHandlerApi(api: apigw.RestApi, authorizer: apigw.TokenAuthorizer, apiKeyTable: dynamodb.ITable, saltSecret: secretsmanager.ISecret, quotaTable: dynamodb.ITable, vpcParams: object, quotaHandlerEcr: ecr.IRepository, defaultQuotaParameter:ssm.StringParameter) {
 
     const quotaHandler = new lambda.DockerImageFunction(this, 'quotaHandler', {
       functionName: this.quotaHandlerFunctionName,
       code: lambda.DockerImageCode.fromEcr(quotaHandlerEcr, { tag: "latest" }),
-      role: this.createQuotaLambdaRole("quotaHandlerRole", quotaTable, defaultQuotaParameter),
+      role: this.createQuotaLambdaRole("quotaHandlerRole", quotaTable, defaultQuotaParameter, apiKeyTable, this.apiKeyValueHashIndex, saltSecret),
       architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
       environment: {
         REGION: this.regionValue,
         QUOTA_TABLE_NAME: quotaTable.tableName,
         DEFAULT_QUOTA_PARAMETER_NAME: defaultQuotaParameter.parameterName,
-        COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix
+        COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix,
+        NON_ADMIN_ENDPOINTS: this.nonAdminEndpoints,
+        API_KEY_EXCLUDED_ENDPOINTS: this.apiKeyExcludedEndpoints,
+        USER_POOL_ID: this.userPool.userPoolId,
+        APP_CLIENT_ID: this.applicationLoadBalanceruserPoolClient.userPoolClientId,
+        ADMIN_LIST: this.adminList,
+        SALT_SECRET: saltSecret.secretName,
+        API_KEY_TABLE_NAME: apiKeyTable.tableName
       },
       timeout: cdk.Duration.minutes(15),
       memorySize: 512,
@@ -978,7 +1017,12 @@ export class LlmGatewayStack extends cdk.Stack {
         API_KEY_TABLE_NAME: apiKeyTable.tableName,
         COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix,
         REGION: this.regionValue,
-        SALT_SECRET: saltSecret.secretName
+        SALT_SECRET: saltSecret.secretName,
+        NON_ADMIN_ENDPOINTS: this.nonAdminEndpoints,
+        API_KEY_EXCLUDED_ENDPOINTS: this.apiKeyExcludedEndpoints,
+        USER_POOL_ID: this.userPool.userPoolId,
+        APP_CLIENT_ID: this.applicationLoadBalanceruserPoolClient.userPoolClientId,
+        ADMIN_LIST: this.adminList,
       },
       timeout: cdk.Duration.minutes(15),
       memorySize: 512,

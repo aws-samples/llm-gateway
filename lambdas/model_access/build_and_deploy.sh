@@ -20,6 +20,10 @@ else
     echo "Repository $APP_NAME already exists, skipping creation."
 fi
 
+echo "Copying common folder into current folder"
+
+cp -r ../common .
+
 ARCH=$(uname -m)
 case $ARCH in
     x86_64)

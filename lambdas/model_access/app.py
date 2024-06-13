@@ -3,6 +3,7 @@ import json
 import logging
 import os
 from boto3.dynamodb.conditions import Key
+from common.auth import auth_handler
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -68,6 +69,13 @@ def lambda_handler(event, context):
              result of handling the event.
     """
     http_method = event.get('httpMethod')
+    path = event['path']
+    print(f'http_method: {http_method}. path: {path}')
+
+    error_response = auth_handler(event, path)
+    if error_response:
+        return error_response
+
     table = boto3.resource("dynamodb").Table(MODEL_ACCESS_TABLE_NAME)
     headers = event["headers"]
 
