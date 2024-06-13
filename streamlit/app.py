@@ -444,7 +444,6 @@ with right_column:
             "meta.llama3-70b-instruct-v1:0": "Llama 3 Bedrock",
             "amazon.titan-text-express-v1": "Amazon Titan G1 Express",
             "mistral.mixtral-8x7b-instruct-v0:1": "Mixtral 8x7B Instruct Bedrock",
-            "Mixtral 8x7B Instruct Bedrock": "mistral.mixtral-8x7b-instruct-v0:1",
         }
 
     provider_map = {
@@ -459,7 +458,8 @@ with right_column:
         # Model dropdown
         model_options = []
         for model in model_access_list:
-            model_options.append(bedrock_reverse_model_map[model])
+            if model in bedrock_reverse_model_map.keys():
+                model_options.append(bedrock_reverse_model_map[model])
 
         move_to_front(model_options, "Claude 3 Haiku Bedrock")
         

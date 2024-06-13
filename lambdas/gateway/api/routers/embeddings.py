@@ -2,16 +2,20 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Body
 
-from api.auth import api_key_auth
+from api.auth import api_key_auth, get_api_key_name
 from api.models import get_embeddings_model
 from api.schema import EmbeddingsRequest, EmbeddingsResponse
 from api.setting import DEFAULT_EMBEDDING_MODEL
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from api.model_access import check_model_access
+from api.quota import check_quota
 
 router = APIRouter(
     prefix="/embeddings",
-    dependencies=[Depends(api_key_auth)],
+    #dependencies=[Depends(api_key_auth)],
 )
 
+security = HTTPBearer()
 
 @router.post("", response_model=EmbeddingsResponse)
 async def embeddings(
@@ -27,10 +31,17 @@ async def embeddings(
                     }
                 ],
             ),
-        ]
+        ],
+        credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)]
 ):
     if embeddings_request.model.lower().startswith("text-embedding-"):
         embeddings_request.model = DEFAULT_EMBEDDING_MODEL
     # Exception will be raised if model not supported.
+    user_name = api_key_auth(credentials)
+    if credentials.credentials.startswith("sk-"):
+        api_key_name = get_api_key_name(credentials.credentials)
+
+    check_model_access(user_name, api_key_name, embeddings_request.model)
+    check_quota(user_name, api_key_name, embeddings_request.model)
     model = get_embeddings_model(embeddings_request.model)
-    return model.embed(embeddings_request)
+    return model.embed(embeddings_request, user_name, api_key_name)

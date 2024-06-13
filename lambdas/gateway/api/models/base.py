@@ -49,6 +49,6 @@ class BaseEmbeddingsModel(ABC):
     """
 
     @abstractmethod
-    def embed(self, embeddings_request: EmbeddingsRequest) -> EmbeddingsResponse:
+    def embed(self, embeddings_request: EmbeddingsRequest, user_name:str, api_key_name:str) -> EmbeddingsResponse:
         """Handle a basic embeddings request."""
         pass

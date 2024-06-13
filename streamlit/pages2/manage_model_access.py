@@ -33,6 +33,8 @@ model_map_1 = {
             "meta.llama3-70b-instruct-v1:0": "Llama 3",
             "amazon.titan-text-express-v1": "Amazon Titan",
             "mistral.mixtral-8x7b-instruct-v0:1": "Mixtral 8x7B",
+            "cohere.embed-multilingual-v3":"Cohere Embed Multilingual",
+            "cohere.embed-english-v3":"Cohere Embed English"
         }
 
 #map for ap-southeast-2, eu-west-1, eu-west-3
@@ -41,6 +43,8 @@ model_map_2 = {
             "anthropic.claude-3-sonnet-20240229-v1:0": "Claude 3 Sonnet",
             "amazon.titan-text-express-v1": "Amazon Titan",
             "mistral.mixtral-8x7b-instruct-v0:1": "Mixtral 8x7B",
+            "cohere.embed-multilingual-v3":"Cohere Embed Multilingual",
+            "cohere.embed-english-v3":"Cohere Embed English"
         }
 
 #map for eu-central-1
@@ -48,6 +52,8 @@ model_map_3 = {
             "anthropic.claude-3-haiku-20240307-v1:0": "Claude 3 Haiku",
             "anthropic.claude-3-sonnet-20240229-v1:0": "Claude 3 Sonnet",
             "amazon.titan-text-express-v1": "Amazon Titan",
+            "cohere.embed-multilingual-v3":"Cohere Embed Multilingual",
+            "cohere.embed-english-v3":"Cohere Embed English"
         }
 
 region_model_map = {
