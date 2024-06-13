@@ -8,7 +8,7 @@ module "streamlit" {
   cpu    = 1024
   memory = 4096
 
-  enable_execute_command = false
+  enable_execute_command = true
   assign_public_ip       = false
   runtime_platform = {
     operating_system_family = "LINUX"

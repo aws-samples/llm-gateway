@@ -8,6 +8,8 @@ resource "aws_security_group" "llm_gateway_rest_model_access_lambda_function_sec
     to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
+
+
   }
 }
 

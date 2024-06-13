@@ -54,7 +54,6 @@ variable "streamlitEcrRepo" {
 
 variable "private_llmgateway_loadbalancer" {
   type    = bool
-  default = false
 }
 
 variable "api_endpoint_configuration" {

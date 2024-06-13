@@ -2,10 +2,10 @@ module "llmgateway_alb" {
   source  = "terraform-aws-modules/alb/aws"
   version = "9.9.0"
 
-  name    = local.name
+  name    = local.private_gateway_loadbalancer ? "${local.name}-private" : "${local.name}-public1"
   vpc_id  = module.vpc.vpc_id
+  internal = local.private_gateway_loadbalancer ? true : false
   subnets = local.private_gateway_loadbalancer ? module.vpc.private_subnets : module.vpc.public_subnets
-
   enable_cross_zone_load_balancing = true
   # For example only
   enable_deletion_protection = false

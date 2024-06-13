@@ -52,6 +52,10 @@ variable "vpc_id" {
   type = string
 }
 
+variable "vpc_cidr_block" {
+  type = string
+}
+
 variable "private_subnet_ids" {
   type = list(string)
 }
@@ -151,4 +155,7 @@ variable "api_endpoint_configuration" {
     condition     = contains(["REGIONAL", "PRIVATE"], var.api_endpoint_configuration)
     error_message = "allowed values are REGIONAL or PRIVATE"
   }
+}
+variable "api_interface_endpoints" {
+  type = list(string)
 }

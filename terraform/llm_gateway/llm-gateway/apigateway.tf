@@ -11,7 +11,6 @@ resource "aws_api_gateway_account" "llm_gateway_rest_api_gateway_account" {
   cloudwatch_role_arn = aws_iam_role.llm_gateway_rest_api_gateway_cloudwatch.arn
 }
 
-
 resource "aws_iam_role" "llm_gateway_rest_api_gateway_cloudwatch" {
   name               = "api_gateway_cloudwatch_global"
   assume_role_policy = data.aws_iam_policy_document.aws_apigateway_cloudwatch_assume_role.json
@@ -23,28 +22,6 @@ resource "aws_iam_role_policy" "cloudwatch" {
   role   = aws_iam_role.llm_gateway_rest_api_gateway_cloudwatch.id
   policy = data.aws_iam_policy_document.aws_apigateway_cloudwatch_policy.json
 }
-
-
-resource "aws_security_group" "llm_gateway_rest_private_security_group" {
-  count = local.api_endpoint_configuration == "PRIVATE" ? 1 : 0
-
-  name   = "${local.name}-security-group"
-  vpc_id = local.vpc_id
-}
-
-
-resource "aws_vpc_endpoint" "llm_gateway_rest_private_endpoints" {
-
-  count               = local.api_endpoint_configuration == "PRIVATE" ? length(local.private_subnet_ids) : 0
-  private_dns_enabled = false
-  security_group_ids  = [aws_security_group.llm_gateway_rest_private_security_group[0].id]
-  service_name        = "com.amazonaws.${local.region}.execute-api"
-  subnet_ids          = local.private_subnet_ids
-  vpc_endpoint_type   = "Interface"
-  vpc_id              = local.vpc_id
-
-}
-
 
 # Create Rest API
 resource "aws_api_gateway_rest_api" "llm_gateway_rest_api" {
@@ -65,23 +42,22 @@ resource "aws_api_gateway_rest_api" "llm_gateway_rest_api" {
           "Resource" : [
             "*"
           ]
-        },
-        {
-          "Effect" : "Deny",
-          "Principal" : "*",
-          "Action" : "execute-api:Invoke",
-          "Resource" : [
-            "*"
-          ],
-          "Condition" : {
-            "ForAllValues:StringNotEquals" : {
-              "aws:SourceVpce" : [for i, v in aws_vpc_endpoint.llm_gateway_rest_private_endpoints : v.id]
-            }
-          }
         }
+#        {
+#          "Effect" : "Deny",
+#          "Principal" : "*",
+#          "Action" : "execute-api:Invoke",
+#          "Resource" : [
+#            "*"
+#          ],
+#          "Condition" : {
+#            "StringNotEquals": {
+#              "aws:SourceVpc": local.vpc_id
+#            }
+#          }
+#        }
       ]
   })
-
 
   dynamic "endpoint_configuration" {
     for_each = local.api_endpoint_configuration != "PRIVATE" ? [1] : []
@@ -89,12 +65,12 @@ resource "aws_api_gateway_rest_api" "llm_gateway_rest_api" {
       types = ["REGIONAL"]
     }
   }
+
   dynamic "endpoint_configuration" {
-    for_each = local.api_endpoint_configuration == "PRIVATE" ? range(length(local.private_subnet_ids)) : []
+    for_each = local.api_endpoint_configuration == "PRIVATE" ? [1] : []
     content {
       types            = ["PRIVATE"]
-      vpc_endpoint_ids = [for i, v in aws_vpc_endpoint.llm_gateway_rest_private_endpoints : v.id]
-
+      vpc_endpoint_ids = local.api_interface_endpoints
     }
   }
 }

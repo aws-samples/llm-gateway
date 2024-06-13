@@ -7,6 +7,7 @@ locals {
   debug   = var.debug
 
   vpc_id                       = var.vpc_id
+  vpc_cidr_block               = var.vpc_cidr_block
   private_subnet_ids           = var.private_subnet_ids
   vpc_default_security_group_id = var.vpc_default_security_group_id
 
@@ -49,6 +50,7 @@ locals {
   authorizer_result_ttl_in_seconds = 300
 
   api_endpoint_configuration = var.api_endpoint_configuration
+  api_interface_endpoints = var.api_interface_endpoints
 
   gateway_certificate_arn = var.llmgateway_certificate_arn
   ui_certificate_arn      = var.streamlit_certificate_arn

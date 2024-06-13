@@ -50,7 +50,7 @@ data "aws_iam_policy_document" "aws_apigateway_cloudwatch_policy" {
       "logs:FilterLogEvents",
     ]
 
-    resources = ["*"]
+    resources = ["arn:aws:logs:*:*:*"]
   }
 }
 
