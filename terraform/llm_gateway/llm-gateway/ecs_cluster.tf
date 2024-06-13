@@ -1,9 +1,9 @@
 
 module "ecs_cluster" {
-  source = "terraform-aws-modules/ecs/aws//modules/cluster"
+  source  = "terraform-aws-modules/ecs/aws//modules/cluster"
   version = "5.11.2"
 
-  cluster_name = local.name
+  cluster_name              = local.name
   cloudwatch_log_group_name = "/aws/ecs/${local.name}"
 
   # Capacity provider

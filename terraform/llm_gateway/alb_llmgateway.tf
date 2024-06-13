@@ -1,5 +1,5 @@
 module "llmgateway_alb" {
-  source = "terraform-aws-modules/alb/aws"
+  source  = "terraform-aws-modules/alb/aws"
   version = "9.9.0"
 
   name    = local.name

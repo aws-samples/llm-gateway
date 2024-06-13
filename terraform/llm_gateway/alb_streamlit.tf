@@ -1,7 +1,6 @@
 module "streamlit_alb" {
-  source = "terraform-aws-modules/alb/aws"
+  source  = "terraform-aws-modules/alb/aws"
   version = "9.9.0"
-
 
   name    = "${local.name}-streamlit"
   vpc_id  = module.vpc.vpc_id
@@ -56,15 +55,15 @@ module "streamlit_alb" {
       rules = {
         streamlit-cognito = {
           actions = [
-                        {
-                          type                       = "authenticate-cognito"
-                          session_cookie_name        = "session-${local.name}"
-                          session_timeout            = 3600
-                          user_pool_arn              = aws_cognito_user_pool.llm_gateway_rest_user_pool.arn
-                          user_pool_client_id        = aws_cognito_user_pool_client.llm_gateway_rest_user_pool_client.id
-                          user_pool_domain           = aws_cognito_user_pool_domain.llm_gateway_rest_user_pool_domain.id
-                          scope                      = "openid email"
-                        },
+            {
+              type                = "authenticate-cognito"
+              session_cookie_name = "session-${local.name}"
+              session_timeout     = 3600
+              user_pool_arn       = aws_cognito_user_pool.llm_gateway_rest_user_pool.arn
+              user_pool_client_id = aws_cognito_user_pool_client.llm_gateway_rest_user_pool_client.id
+              user_pool_domain    = aws_cognito_user_pool_domain.llm_gateway_rest_user_pool_domain.id
+              scope               = "openid email"
+            },
             {
               type             = "forward"
               target_group_key = local.streamlit_ui.container_name
@@ -84,7 +83,7 @@ module "streamlit_alb" {
   target_groups = {
 
     "${local.streamlit_ui.container_name}" = {
-      port = local.streamlit_ui.container_port
+      port                              = local.streamlit_ui.container_port
       backend_protocol                  = "HTTP"
       backend_port                      = local.streamlit_ui.container_port
       target_type                       = "ip"

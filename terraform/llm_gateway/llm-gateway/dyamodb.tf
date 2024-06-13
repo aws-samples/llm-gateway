@@ -9,11 +9,11 @@ resource "aws_dynamodb_table" "llm_gateway_rest_chat_history" {
     enabled = true
   }
 
-  read_capacity = 5
+  read_capacity  = 5
   write_capacity = 5
   server_side_encryption {
-    enabled = true
-    kms_key_arn = local.kms_key_arn == null ? module.llm_gateway_rest_kms[0].key_arn: local.kms_key_arn
+    enabled     = true
+    kms_key_arn = local.kms_key_arn
   }
 
   hash_key = local.chatHistoryTablePartitionKey
@@ -36,18 +36,18 @@ resource "aws_dynamodb_table" "llm_gateway_rest_quota" {
     enabled = true
   }
 
-  read_capacity = 5
+  read_capacity  = 5
   write_capacity = 5
 
   server_side_encryption {
-    enabled = true
-    kms_key_arn = local.kms_key_arn == null ? module.llm_gateway_rest_kms[0].key_arn: local.kms_key_arn
+    enabled     = true
+    kms_key_arn = local.kms_key_arn
   }
 
-  hash_key = local.quotaTablePartitionKey
+  hash_key  = local.quotaTablePartitionKey
   range_key = local.quotaTableSortKey
 
-  name     = "${local.name}-${local.quotaTableName}"
+  name = "${local.name}-${local.quotaTableName}"
 }
 
 
@@ -72,26 +72,26 @@ resource "aws_dynamodb_table" "llm_gateway_rest_apikey" {
     enabled = true
   }
 
-  read_capacity = 5
+  read_capacity  = 5
   write_capacity = 5
 
   server_side_encryption {
-    enabled = true
-    kms_key_arn = local.kms_key_arn == null ? module.llm_gateway_rest_kms[0].key_arn: local.kms_key_arn
+    enabled     = true
+    kms_key_arn = local.kms_key_arn
   }
 
-  hash_key = local.apiKeyTablePartitionKey
+  hash_key  = local.apiKeyTablePartitionKey
   range_key = local.apiKeyTableSortKey
 
-  name     = "${local.name}-${local.apiKeyTableName}"
+  name = "${local.name}-${local.apiKeyTableName}"
 
   global_secondary_index {
-    name            = local.apiKeyValueHashIndex
+    name = local.apiKeyValueHashIndex
 
     hash_key        = local.apiKeyTableIndexPartitionKey
     projection_type = "ALL"
-    read_capacity = 5
-    write_capacity = 5
+    read_capacity   = 5
+    write_capacity  = 5
   }
 }
 
@@ -107,11 +107,11 @@ resource "aws_dynamodb_table" "llm_gateway_rest_model_access" {
     enabled = true
   }
 
-  read_capacity = 5
+  read_capacity  = 5
   write_capacity = 5
   server_side_encryption {
-    enabled = true
-    kms_key_arn = local.kms_key_arn == null ? module.llm_gateway_rest_kms[0].key_arn: local.kms_key_arn
+    enabled     = true
+    kms_key_arn = local.kms_key_arn
   }
 
   hash_key = local.modelAccessTablePartitionKey
@@ -135,18 +135,18 @@ resource "aws_dynamodb_table" "llm_gateway_rest_request_details" {
     enabled = true
   }
 
-  read_capacity = 5
+  read_capacity  = 5
   write_capacity = 5
 
   server_side_encryption {
-    enabled = true
-    kms_key_arn = local.kms_key_arn == null ? module.llm_gateway_rest_kms[0].key_arn: local.kms_key_arn
+    enabled     = true
+    kms_key_arn = local.kms_key_arn
   }
 
-  hash_key = local.requestDetailsTablePartitionKey
+  hash_key  = local.requestDetailsTablePartitionKey
   range_key = local.requestDetailsTableSortKey
 
-  name     = "${local.name}-${local.requestDetailsTableName}"
+  name = "${local.name}-${local.requestDetailsTableName}"
 
 
 }

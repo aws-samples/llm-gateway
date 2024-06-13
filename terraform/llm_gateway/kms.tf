@@ -2,15 +2,15 @@
 module "llm_gateway_rest_kms" {
   count = local.kms_key_arn == null ? 1 : 0
 
-  source = "terraform-aws-modules/kms/aws"
+  source  = "terraform-aws-modules/kms/aws"
   version = "3.0.0"
 
 
-  description = local.name
-  key_usage   = "ENCRYPT_DECRYPT"
-  is_enabled = true
+  description           = local.name
+  key_usage             = "ENCRYPT_DECRYPT"
+  is_enabled            = true
   enable_default_policy = true
-  aliases = [local.name]
+  aliases               = [local.name]
   key_statements = [
     {
       sid = "CloudWatchLogs"

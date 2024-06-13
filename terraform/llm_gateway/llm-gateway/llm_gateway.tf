@@ -1,17 +1,17 @@
 module "ecs" {
-  source = "terraform-aws-modules/ecs/aws//modules/service"
+  source  = "terraform-aws-modules/ecs/aws//modules/service"
   version = "5.11.2"
 
   name        = local.name
   cluster_arn = module.ecs_cluster.arn
 
-  cpu    = local.llm_gateway.cpu
-  memory = local.llm_gateway.memory
+  cpu           = local.llm_gateway.cpu
+  memory        = local.llm_gateway.memory
   desired_count = local.llm_gateway.desired_count
 
   # Enables ECS Exec
   enable_execute_command = false
-  assign_public_ip = false
+  assign_public_ip       = false
   runtime_platform = {
     operating_system_family = "LINUX"
     cpu_architecture        = "ARM64"
@@ -67,7 +67,7 @@ module "ecs" {
         {
 
           name  = "COGNITO_DOMAIN_PREFIX"
-          value = aws_cognito_user_pool_domain.llm_gateway_rest_user_pool_domain.domain
+          value = local.cognito_domain_prefix
         },
         {
 
@@ -82,12 +82,12 @@ module "ecs" {
         {
 
           name  = "USER_POOL_ID"
-          value = aws_cognito_user_pool.llm_gateway_rest_user_pool.id,
+          value = local.user_pool_id,
         },
         {
 
           name  = "APP_CLIENT_ID"
-          value = aws_cognito_user_pool_client.llm_gateway_rest_user_pool_client.id
+          value = local.app_client_id
         },
         {
 
@@ -153,20 +153,20 @@ module "ecs" {
 
   load_balancer = {
     service = {
-      target_group_arn = module.llmgateway_alb.target_groups[local.llm_gateway.container_name].arn
+      target_group_arn = local.llm_gateway.target_group_arn
       container_name   = local.llm_gateway.container_name
       container_port   = local.llm_gateway.container_port
     }
   }
 
-  subnet_ids = module.vpc.private_subnets
+  subnet_ids = local.private_subnet_ids
 
   tasks_iam_role_statements = [
     {
-      actions   = [
+      actions = [
         "logs:CreateLogGroup",
         "logs:CreateLogStream",
-        "logs:PutLogEvents",]
+      "logs:PutLogEvents", ]
       resources = ["*"]
     },
     {
@@ -182,7 +182,7 @@ module "ecs" {
       ],
     },
     {
-      effect  = "Allow",
+      effect = "Allow",
       actions = [
         "dynamodb:BatchWriteItem",
         "dynamodb:DeleteItem",
@@ -202,7 +202,7 @@ module "ecs" {
       ],
     },
     {
-      effect  = "Allow",
+      effect = "Allow",
       actions = [
         "kms:Encrypt",
         "kms:Decrypt",
@@ -210,10 +210,10 @@ module "ecs" {
         "kms:GenerateDataKey*",
         "kms:DescribeKey"
       ],
-      "resources" : [local.kms_key_arn == null ? module.llm_gateway_rest_kms[0].key_arn : local.kms_key_arn],
+      "resources" : [local.kms_key_arn ],
     },
     {
-      effect  = "Allow",
+      effect = "Allow",
       actions = [
         "secretsmanager:GetSecretValue",
         "secretsmanager:DescribeSecret"
@@ -221,7 +221,7 @@ module "ecs" {
       resources = [aws_secretsmanager_secret.llm_gateway_rest_secret_salt.arn]
     },
     {
-      effect  = "Allow",
+      effect = "Allow",
       actions = [
         "ssm:GetParameter",
       ],
@@ -234,10 +234,10 @@ module "ecs" {
 
   task_exec_iam_statements = [
     {
-      actions   = [
+      actions = [
         "logs:CreateLogGroup",
         "logs:CreateLogStream",
-        "logs:PutLogEvents",]
+      "logs:PutLogEvents", ]
       resources = ["*"]
     }
   ]
@@ -245,12 +245,12 @@ module "ecs" {
   security_group_rules = {
 
     alb_ingress = {
-      type                     = "ingress"
-      from_port                = local.llm_gateway.container_port
-      to_port                  = local.llm_gateway.container_port
-      protocol                 = "tcp"
-      description              = "Service port"
-      cidr_blocks              = [module.vpc.vpc_cidr_block]
+      type        = "ingress"
+      from_port   = local.llm_gateway.container_port
+      to_port     = local.llm_gateway.container_port
+      protocol    = "tcp"
+      description = "Service port"
+      source_security_group_id = local.llm_gateway.alb_security_group_id
     }
 
     egress_all = {

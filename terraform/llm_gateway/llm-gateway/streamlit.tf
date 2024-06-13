@@ -1,5 +1,5 @@
 module "streamlit" {
-  source = "terraform-aws-modules/ecs/aws//modules/service"
+  source  = "terraform-aws-modules/ecs/aws//modules/service"
   version = "5.11.2"
 
   name        = "${local.name}-streamlit"
@@ -9,7 +9,7 @@ module "streamlit" {
   memory = 4096
 
   enable_execute_command = false
-  assign_public_ip = false
+  assign_public_ip       = false
   runtime_platform = {
     operating_system_family = "LINUX"
     cpu_architecture        = upper(local.architectures)
@@ -48,7 +48,7 @@ module "streamlit" {
       environment = [
         {
           name  = "LlmGatewayUrl"
-          value = "https://${module.llmgateway_alb.dns_name}"
+          value = "https://${local.llm_gateway.alb_dns_name}/api/v1"
         },
         {
           name  = "ApiGatewayURL"
@@ -56,7 +56,7 @@ module "streamlit" {
         },
         {
           name  = "ApiGatewayModelAccessURL"
-          value =  "${aws_api_gateway_stage.llm_gateway_rest_api_stage.invoke_url}/"
+          value = "${aws_api_gateway_stage.llm_gateway_rest_api_stage.invoke_url}/"
         },
         {
           name  = "Region"
@@ -68,7 +68,7 @@ module "streamlit" {
         },
         {
           name  = "CognitoClientId"
-          value = aws_cognito_user_pool_client.llm_gateway_rest_user_pool_client.id
+          value = local.app_client_id
         },
         {
           name  = "AdminList"
@@ -101,14 +101,14 @@ module "streamlit" {
   load_balancer = {
 
     service = {
-      target_group_arn = module.streamlit_alb.target_groups[local.streamlit_ui.container_name].arn
+      target_group_arn = local.streamlit_ui.target_group_arn
       container_name   = local.streamlit_ui.container_name
       container_port   = local.streamlit_ui.container_port
     }
   }
   force_new_deployment = true
 
-  subnet_ids = module.vpc.private_subnets
+  subnet_ids = local.private_subnet_ids
 
   security_group_rules = {
     alb_ingress = {
@@ -117,7 +117,7 @@ module "streamlit" {
       to_port                  = local.streamlit_ui.container_port
       protocol                 = "tcp"
       description              = "Service port"
-      source_security_group_id = module.streamlit_alb.security_group_id
+      source_security_group_id = local.streamlit_ui.alb_security_group_id
     }
 
     egress_all = {

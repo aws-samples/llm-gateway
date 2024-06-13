@@ -1,10 +1,10 @@
 # Create Cloudwatch Log Group for Rest API
 resource "aws_cloudwatch_log_group" "llm_gateway_rest_log_group" {
-  name = "${local.name}-log-group"
+  name              = "${local.name}-log-group"
   retention_in_days = 365
-  kms_key_id = local.kms_key_arn == null ? module.llm_gateway_rest_kms[0].key_arn: local.kms_key_arn
-  skip_destroy = false
-  tags = local.tags
+  kms_key_id        = local.kms_key_arn
+  skip_destroy      = false
+  tags              = local.tags
 }
 
 resource "aws_api_gateway_account" "llm_gateway_rest_api_gateway_account" {
@@ -28,20 +28,20 @@ resource "aws_iam_role_policy" "cloudwatch" {
 resource "aws_security_group" "llm_gateway_rest_private_security_group" {
   count = local.api_endpoint_configuration == "PRIVATE" ? 1 : 0
 
-  name = "${local.name}-security-group"
-  vpc_id = module.vpc.vpc_id
+  name   = "${local.name}-security-group"
+  vpc_id = local.vpc_id
 }
 
 
 resource "aws_vpc_endpoint" "llm_gateway_rest_private_endpoints" {
 
-  count  = local.api_endpoint_configuration == "PRIVATE" ? length(module.vpc.private_subnets): 0
+  count               = local.api_endpoint_configuration == "PRIVATE" ? length(local.private_subnet_ids) : 0
   private_dns_enabled = false
   security_group_ids  = [aws_security_group.llm_gateway_rest_private_security_group[0].id]
   service_name        = "com.amazonaws.${local.region}.execute-api"
-  subnet_ids          = module.vpc.private_subnets
+  subnet_ids          = local.private_subnet_ids
   vpc_endpoint_type   = "Interface"
-  vpc_id              = module.vpc.vpc_id
+  vpc_id              = local.vpc_id
 
 }
 
@@ -56,44 +56,44 @@ resource "aws_api_gateway_rest_api" "llm_gateway_rest_api" {
 
   policy = local.api_endpoint_configuration != "PRIVATE" ? null : jsonencode(
     {
-      "Version": "2012-10-17",
-      "Statement": [
+      "Version" : "2012-10-17",
+      "Statement" : [
         {
-          "Effect": "Allow",
-          "Principal": "*",
-          "Action": "execute-api:Invoke",
-          "Resource": [
+          "Effect" : "Allow",
+          "Principal" : "*",
+          "Action" : "execute-api:Invoke",
+          "Resource" : [
             "*"
           ]
         },
         {
-          "Effect": "Deny",
-          "Principal": "*",
-          "Action": "execute-api:Invoke",
-          "Resource": [
+          "Effect" : "Deny",
+          "Principal" : "*",
+          "Action" : "execute-api:Invoke",
+          "Resource" : [
             "*"
           ],
           "Condition" : {
-            "ForAllValues:StringNotEquals": {
-              "aws:SourceVpce": [for i,v in aws_vpc_endpoint.llm_gateway_rest_private_endpoints: v.id]
+            "ForAllValues:StringNotEquals" : {
+              "aws:SourceVpce" : [for i, v in aws_vpc_endpoint.llm_gateway_rest_private_endpoints : v.id]
             }
           }
         }
       ]
-    })
+  })
 
 
   dynamic "endpoint_configuration" {
-    for_each = local.api_endpoint_configuration != "PRIVATE" ? [1]: []
+    for_each = local.api_endpoint_configuration != "PRIVATE" ? [1] : []
     content {
       types = ["REGIONAL"]
     }
   }
   dynamic "endpoint_configuration" {
-    for_each = local.api_endpoint_configuration == "PRIVATE" ? range(length(module.vpc.private_subnets)) : []
+    for_each = local.api_endpoint_configuration == "PRIVATE" ? range(length(local.private_subnet_ids)) : []
     content {
-      types = ["PRIVATE"]
-      vpc_endpoint_ids = [for i,v in aws_vpc_endpoint.llm_gateway_rest_private_endpoints: v.id]
+      types            = ["PRIVATE"]
+      vpc_endpoint_ids = [for i, v in aws_vpc_endpoint.llm_gateway_rest_private_endpoints : v.id]
 
     }
   }
@@ -106,13 +106,17 @@ resource "aws_api_gateway_deployment" "llm_gateway_rest_api_deployment" {
     create_before_destroy = true
   }
   depends_on = [
-#        aws_api_gateway_integration.llm_gateway_rest_apikey_method_delete_integration,
-#        aws_api_gateway_integration.llm_gateway_rest_apikey_method_get_integration,
-#        aws_api_gateway_integration.llm_gateway_rest_apikey_method_post_integration,
-        aws_api_gateway_integration.llm_gateway_rest_quota_method_delete_integration,
-        aws_api_gateway_integration.llm_gateway_rest_quota_method_post_integration,
-        aws_api_gateway_integration.llm_gateway_rest_quota_method_get_integration,
-        aws_api_gateway_integration.llm_gateway_rest_quota_summary_method_get_integration,
+    aws_api_gateway_integration.llm_gateway_rest_apikey_method_delete_integration,
+    aws_api_gateway_integration.llm_gateway_rest_apikey_method_get_integration,
+    aws_api_gateway_integration.llm_gateway_rest_apikey_method_post_integration,
+    aws_api_gateway_integration.llm_gateway_rest_quota_method_delete_integration,
+    aws_api_gateway_integration.llm_gateway_rest_quota_method_post_integration,
+    aws_api_gateway_integration.llm_gateway_rest_quota_method_get_integration,
+    aws_api_gateway_integration.llm_gateway_rest_quota_summary_method_get_integration,
+    aws_api_gateway_integration.llm_gateway_rest_model_access_resource_get_integration,
+    aws_api_gateway_integration.llm_gateway_rest_model_access_current_user_resource_get_integration,
+    aws_api_gateway_integration.llm_gateway_rest_model_access_username_resource_delete_integration,
+    aws_api_gateway_integration.llm_gateway_rest_model_access_username_resource_post_integration
   ]
 }
 
@@ -144,10 +148,10 @@ resource "aws_api_gateway_request_validator" "llm_gateway_rest_api_request_valid
 resource "aws_api_gateway_model" "llm_gateway_rest_api_request_model" {
 
   content_type = "application/json"
-  description = "Validate LLM request body"
-  name = "requestmodel"
-  rest_api_id = aws_api_gateway_rest_api.llm_gateway_rest_api.id
-  schema = <<EOF
+  description  = "Validate LLM request body"
+  name         = "requestmodel"
+  rest_api_id  = aws_api_gateway_rest_api.llm_gateway_rest_api.id
+  schema       = <<EOF
 {
   "type": "object",
   "required": [
@@ -180,7 +184,7 @@ EOF
 # Create Rest API Keys
 resource "aws_api_gateway_api_key" "llm_gateway_rest_api_key" {
   enabled = true
-  name = "${local.name}-ApiKey"
+  name    = "${local.name}-ApiKey"
 }
 
 
