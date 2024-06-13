@@ -761,8 +761,6 @@ export class LlmGatewayStack extends cdk.Stack {
       },
     })
 
-    const nonAdminEndpoints = []
-
     const authHandler = new lambdaPython.PythonFunction(this, 'AuthHandlerFunction', {
       entry: path.join(__dirname, "../../lambdas/authorizer"),
       index: 'app.py',

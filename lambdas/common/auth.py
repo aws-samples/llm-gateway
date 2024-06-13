@@ -191,11 +191,14 @@ def unauthorized_response():
 def authorized_response():
     return None
 
-def cache_authorized(token):
-    add_to_cache(token, authorized_cache_value)
+def get_cached_authorization(token, current_method):
+    get_from_cache(token+current_method)
 
-def cache_unauthorized(token):
-    add_to_cache(token, unauthorized_cache_value)
+def cache_authorized(token, current_method):
+    add_to_cache(token+current_method, authorized_cache_value)
+
+def cache_unauthorized(token, current_method):
+    add_to_cache(token+current_method, unauthorized_cache_value)
 
 def auth_handler(event, current_method):
     try:
@@ -207,7 +210,7 @@ def auth_handler(event, current_method):
             raise Exception('Authorization header should have a format Bearer <JWT> Token')
         bearer_token = token[1]
 
-        cached_auth_response = get_from_cache(bearer_token)
+        cached_auth_response = get_cached_authorization(bearer_token, current_method)
         if cached_auth_response:
             logger.info(f'Cached response value for passed in token: {cached_auth_response}')
             if cached_auth_response == authorized_cache_value:
@@ -230,7 +233,7 @@ def auth_handler(event, current_method):
             is_api_key = True
             response = get_user_name_api_key(bearer_token)
             if not response:
-                cache_unauthorized(bearer_token)
+                cache_unauthorized(bearer_token, current_method)
                 return unauthorized_response()
             user_name = response['username']
         else:
@@ -238,7 +241,7 @@ def auth_handler(event, current_method):
             response = validateJWT(bearer_token, APP_CLIENT_ID, keys)
             #get authenticated claims
             if not response:
-                cache_unauthorized(bearer_token)
+                cache_unauthorized(bearer_token, current_method)
                 return unauthorized_response()
             user_name = get_user_name(bearer_token)
 
@@ -246,19 +249,19 @@ def auth_handler(event, current_method):
 
         if is_api_key and current_method in API_KEY_EXCLUDED_ENDPOINTS:
             logger.info(f"Access denied for user {user_name} using his api key")
-            cache_unauthorized(bearer_token)
+            cache_unauthorized(bearer_token, current_method)
             return unauthorized_response()
         elif user_name in ADMIN_LIST:
             logger.info(f"Access granted for user admin {user_name}")
-            cache_authorized(bearer_token)
+            cache_authorized(bearer_token, current_method)
             return authorized_response()
         elif current_method in NON_ADMIN_ENDPOINTS:
             logger.info(f"Access granted for user developer {user_name}")
-            cache_authorized(bearer_token)
+            cache_authorized(bearer_token, current_method)
             authorized_response()
         else:
             logger.info(f"Access denied for user developer {user_name}")
-            cache_unauthorized(bearer_token)
+            cache_unauthorized(bearer_token, current_method)
             return unauthorized_response()
     except Exception as e:
         logger.error(f"Failed to authorize with error {e}")
