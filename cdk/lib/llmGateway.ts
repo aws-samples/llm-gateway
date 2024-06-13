@@ -534,7 +534,7 @@ export class LlmGatewayStack extends cdk.Stack {
 
     // Create Lambda function from the ECR image.
     const vpcParams = this.configureVpcParams();
-    let targetGroup :elbv2.ApplicationTargetGroup;
+    let targetGroupLlmGateway :elbv2.ApplicationTargetGroup;
 
     const environment = {
       CHAT_HISTORY_TABLE_NAME: chatHistoryTable.tableName,
@@ -602,7 +602,7 @@ export class LlmGatewayStack extends cdk.Stack {
       });
 
       //Create a target group for the Lambda function
-      targetGroup = new elbv2.ApplicationTargetGroup(this, 'LambdaTargetGroup', {
+      targetGroupLlmGateway = new elbv2.ApplicationTargetGroup(this, 'LambdaTargetGroup', {
         vpc,
         targetType: elbv2.TargetType.LAMBDA,
         targets: [new targets.LambdaTarget(fn)],
@@ -676,7 +676,7 @@ export class LlmGatewayStack extends cdk.Stack {
       });
 
       //Create a target group for the ECS task
-      targetGroup = this.createEcsTargetGroup(vpc, service, this.llmGatewayIsPublic ? "Public" : "Private")
+      targetGroupLlmGateway = this.createEcsTargetGroup(vpc, service, this.llmGatewayIsPublic ? "Public" : "Private")
 
       new cdk.CfnOutput(this, 'LlmgatewayEcsTask', {
         value: llmGatewayEcsTask,
@@ -791,7 +791,10 @@ export class LlmGatewayStack extends cdk.Stack {
     const llmGatewayAppListener = llmGatewayAlb.addListener('LlmGatewayAppListener', {
       port: 443,
       protocol: elbv2.ApplicationProtocol.HTTPS,
-      certificates: [{ certificateArn: this.llmGatewayCertArn }],
+      certificates: [
+        { certificateArn: this.llmGatewayCertArn },
+        { certificateArn: this.uiCertArn }
+      ],
       defaultAction: elbv2.ListenerAction.fixedResponse(200, {
         contentType: "text/plain",
         messageBody: "This is the default action."
@@ -800,8 +803,8 @@ export class LlmGatewayStack extends cdk.Stack {
 
     llmGatewayAppListener.addAction('ForwardToLambdaAction', {
       priority: 10,
-      conditions: [elbv2.ListenerCondition.pathPatterns(["/", "/*"])],
-      action: elbv2.ListenerAction.forward([targetGroup])
+      conditions: [elbv2.ListenerCondition.hostHeaders([this.llmGatewayDomainName])],
+      action: elbv2.ListenerAction.forward([targetGroupLlmGateway])
     });
 
     const llmGatewayAppListener80 = llmGatewayAlb.addListener('LlmGatewayAppListener80', {
@@ -843,7 +846,7 @@ export class LlmGatewayStack extends cdk.Stack {
     });
 
     //Replace api.apiEndpoint with the url of the application load balancer
-    this.setUpStreamlit(cluster, vpc, LlmGatewayUrl, api)
+    this.setUpStreamlit(llmGatewayAlb, llmGatewayAppListener, llmGatewayAlbSecurityGroup, cluster, vpc, LlmGatewayUrl, api)
   }
 
   createSaltSecret() : secretsmanager.Secret {
@@ -1143,7 +1146,7 @@ export class LlmGatewayStack extends cdk.Stack {
         });
   }
 
-  setUpStreamlit(cluster: ecs.Cluster, vpc: ec2.Vpc, llmGatewayUrl: string, apiGatewayApi: apigw.RestApi) {
+  setUpStreamlit(lb: elbv2.ApplicationLoadBalancer, appListener:elbv2.ApplicationListener, albSecurityGroup: ec2.SecurityGroup, cluster: ecs.Cluster, vpc: ec2.Vpc, llmGatewayUrl: string, apiGatewayApi: apigw.RestApi) {
     const logGroup = new logs.LogGroup(this, 'AppLogGroup', {
       logGroupName: '/ecs/LlmGateway/StreamlitUI',
       removalPolicy: cdk.RemovalPolicy.DESTROY
@@ -1197,15 +1200,6 @@ export class LlmGatewayStack extends cdk.Stack {
       hostPort: 8501
     });
 
-    const albSecurityGroup = new ec2.SecurityGroup(this, 'ALBSecurityGroup', {
-      securityGroupName: 'LlmGatewayALB-sg',
-      vpc,
-      allowAllOutbound: true,
-    });
-
-    albSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80));
-    albSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443));
-
     const appSecurityGroup = new ec2.SecurityGroup(this, 'AppSecurityGroup', {
       securityGroupName: 'LlmGatewayUI-sg',
       vpc,
@@ -1233,12 +1227,6 @@ export class LlmGatewayStack extends cdk.Stack {
       description: 'Name of the llmgateway ecs task'
     });
 
-    const lb = new elbv2.ApplicationLoadBalancer(this, 'LB', {
-      vpc,
-      internetFacing: true,
-      securityGroup: albSecurityGroup,
-    });
-
     const targetGroup = new elbv2.ApplicationTargetGroup(this, 'AppTG', {
       vpc,
       targetGroupName: 'LlmGatewayUI',
@@ -1248,30 +1236,9 @@ export class LlmGatewayStack extends cdk.Stack {
       targets: [service]
     });
 
-    const appListener = lb.addListener('appListener', {
-      port: 443,
-      protocol: elbv2.ApplicationProtocol.HTTPS,
-      certificates: [{ certificateArn: this.uiCertArn }],
-      defaultAction: elbv2.ListenerAction.fixedResponse(200, {
-        contentType: "text/plain",
-        messageBody: "This is the default action."
-      }),
-    });
-
-    const appListener80 = lb.addListener('appListener80', {
-      port: 80,
-      protocol: elbv2.ApplicationProtocol.HTTP,
-      defaultAction: elbv2.ListenerAction.redirect({
-        port:"443",
-        protocol: "HTTPS",
-        permanent: true
-      })
-    });
-
-
     appListener.addAction("authenticate-cognito", {
-      priority: 10,
-      conditions: [elbv2.ListenerCondition.pathPatterns(["/", "/*"])],
+      priority: 20,
+      conditions: [elbv2.ListenerCondition.hostHeaders([this.uiDomainName])],
       action: new elbv2Actions.AuthenticateCognitoAction({
         userPool:this.userPool,
         userPoolClient: this.applicationLoadBalanceruserPoolClient,
