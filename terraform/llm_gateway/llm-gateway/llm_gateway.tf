@@ -126,7 +126,7 @@ module "ecs" {
         {
 
           name  = "USER_POOL_ID"
-          value = local.user_pool_arn,
+          value = local.user_pool_id,
         },
         {
 

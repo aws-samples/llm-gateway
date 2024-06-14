@@ -33,7 +33,13 @@ module "llm_gateway_rest_apikey_handler" {
     COGNITO_DOMAIN_PREFIX : local.cognito_domain_prefix,
     REGION : local.region,
     SALT_SECRET : aws_secretsmanager_secret.llm_gateway_rest_secret_salt.name
+    NON_ADMIN_ENDPOINTS: local.non_admin_endpoints,
+    API_KEY_EXCLUDED_ENDPOINTS: local.api_key_excluded_endpoints,
+    USER_POOL_ID: local.user_pool_id,
+    APP_CLIENT_ID: local.user_pool_app_client_id,
+    ADMIN_LIST: local.admin_list,
   }
+
 
   publish = true
   timeout = 900

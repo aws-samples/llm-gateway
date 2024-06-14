@@ -32,8 +32,16 @@ module "llm_gateway_rest_model_access_handler" {
   environment_variables = {
     REGION : local.region,
     MODEL_ACCESS_TABLE_NAME : aws_dynamodb_table.llm_gateway_rest_model_access.name,
+    API_KEY_TABLE_NAME: aws_dynamodb_table.llm_gateway_rest_apikey.name
     DEFAULT_MODEL_ACCESS_PARAMETER_NAME : aws_ssm_parameter.llm_gateway_rest_ssm_parameter_default_model_list.name,
     COGNITO_DOMAIN_PREFIX : local.cognito_domain_prefix
+    NON_ADMIN_ENDPOINTS: local.non_admin_endpoints,
+    API_KEY_EXCLUDED_ENDPOINTS: local.api_key_excluded_endpoints,
+    USER_POOL_ID: local.user_pool_id,
+    APP_CLIENT_ID: local.user_pool_app_client_id,
+    ADMIN_LIST: local.admin_list,
+    SALT_SECRET : aws_secretsmanager_secret.llm_gateway_rest_secret_salt.name
+
   }
 
   publish = true
@@ -74,6 +82,8 @@ module "llm_gateway_rest_model_access_handler" {
       ],
       "resources" : [
         aws_dynamodb_table.llm_gateway_rest_model_access.arn,
+        aws_dynamodb_table.llm_gateway_rest_apikey.arn,
+        "${aws_dynamodb_table.llm_gateway_rest_apikey.arn}/index/*"
       ],
     }
 

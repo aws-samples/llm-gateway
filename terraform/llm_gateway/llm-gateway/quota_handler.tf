@@ -34,6 +34,14 @@ module "llm_gateway_rest_quota_handler" {
     QUOTA_TABLE_NAME : aws_dynamodb_table.llm_gateway_rest_quota.name,
     DEFAULT_QUOTA_PARAMETER_NAME : aws_ssm_parameter.llm_gateway_rest_ssm_parameter_default_quota.name
     COGNITO_DOMAIN_PREFIX : local.cognito_domain_prefix
+    NON_ADMIN_ENDPOINTS: local.non_admin_endpoints,
+    API_KEY_EXCLUDED_ENDPOINTS: local.api_key_excluded_endpoints,
+    USER_POOL_ID: local.user_pool_id,
+    APP_CLIENT_ID: local.user_pool_app_client_id,
+    ADMIN_LIST: local.admin_list,
+    API_KEY_TABLE_NAME: aws_dynamodb_table.llm_gateway_rest_apikey.name
+    SALT_SECRET : aws_secretsmanager_secret.llm_gateway_rest_secret_salt.name
+
   }
 
   publish = true
@@ -74,6 +82,8 @@ module "llm_gateway_rest_quota_handler" {
       ],
       "resources" : [
         aws_dynamodb_table.llm_gateway_rest_quota.arn,
+        aws_dynamodb_table.llm_gateway_rest_apikey.arn,
+        "${aws_dynamodb_table.llm_gateway_rest_apikey.arn}/index/*"
       ],
     }
 

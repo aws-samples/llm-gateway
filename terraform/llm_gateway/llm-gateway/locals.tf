@@ -34,7 +34,13 @@ locals {
   request_details_table_partition_key = "username"
   request_details_table_sort_key      = "timestamp"
 
-  user_pool_arn     = var.user_pool_id
+  non_admin_endpoints = "/apikey,/quota/currentusersummary,/modelaccess/currentuser"
+  api_key_excluded_endpoints = "/apikey"
+
+
+  user_pool_id      = var.user_pool_id
+  user_pool_arn     = var.user_pool_arn
+
   user_pool_app_client_id    = var.user_pool_app_client_id
   user_pool_domain = var.user_pool_domain
 
@@ -73,21 +79,21 @@ locals {
     name = "apikey"
     prefix = "apikey"
     priority= 20
-    path = "/apikey/*"
+    path = "/apikey*"
   }
 
   quota = {
     name = "quota"
     prefix = "quota"
     priority= 30
-    path = "/modelaccess/*"
+    path = "/quota*"
   }
 
   model-access = {
     name = "model-access"
     prefix="modela"
     priority= 40
-    path = "/modelaccess/*"
+    path = "/modelaccess*"
   }
 
   llm_gateway = {

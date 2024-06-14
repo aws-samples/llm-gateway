@@ -1,5 +1,5 @@
 output "llm_gateway_url" {
-  value = module.llmgateway_alb.dns_name
+  value = "https://${module.llmgateway_alb.dns_name}"
 }
 
 #output "streamlit_url" {

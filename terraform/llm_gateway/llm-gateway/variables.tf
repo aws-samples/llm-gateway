@@ -92,6 +92,10 @@ variable "user_pool_domain" {
 variable "user_pool_id" {
   type = string
 }
+variable "user_pool_arn" {
+  type = string
+}
+
 
 variable "kms_key_arn" {
   type = string

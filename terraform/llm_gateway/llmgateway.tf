@@ -22,7 +22,8 @@ module "llm_gateway" {
 
 
   # Cognito related Local variables
-  user_pool_id            = aws_cognito_user_pool.llm_gateway_rest_user_pool.arn
+  user_pool_id            = aws_cognito_user_pool.llm_gateway_rest_user_pool.id
+  user_pool_arn           = aws_cognito_user_pool.llm_gateway_rest_user_pool.arn
   user_pool_app_client_id = aws_cognito_user_pool_client.llm_gateway_rest_user_pool_client.id
   user_pool_domain        = aws_cognito_user_pool_domain.llm_gateway_rest_user_pool_domain.domain
   cognito_domain_prefix   = var.cognito_domain_prefix
