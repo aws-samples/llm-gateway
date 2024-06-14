@@ -2,8 +2,8 @@ module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "5.8.1"
 
-  name = "my-vpc"
-  cidr = "10.0.0.0/16"
+  name = local.name
+  cidr = local.vpc_cidr
 
   azs                  = local.azs
   public_subnets       = [for k, v in local.azs : cidrsubnet(local.vpc_cidr, 8, k)]
