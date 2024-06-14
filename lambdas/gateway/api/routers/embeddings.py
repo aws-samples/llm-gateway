@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Body
 
 from api.auth import api_key_auth, get_api_key_name
-from api.models import get_embeddings_model
+from api.models.bedrock import get_embeddings_model
 from api.schema import EmbeddingsRequest, EmbeddingsResponse
 from api.setting import DEFAULT_EMBEDDING_MODEL
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -36,12 +36,12 @@ async def embeddings(
 ):
     if embeddings_request.model.lower().startswith("text-embedding-"):
         embeddings_request.model = DEFAULT_EMBEDDING_MODEL
-    # Exception will be raised if model not supported.
     user_name = api_key_auth(credentials)
     if credentials.credentials.startswith("sk-"):
         api_key_name = get_api_key_name(credentials.credentials)
 
     check_model_access(user_name, api_key_name, embeddings_request.model)
     check_quota(user_name, api_key_name, embeddings_request.model)
+    # Exception will be raised if model not supported.
     model = get_embeddings_model(embeddings_request.model)
-    return model.embed(embeddings_request, user_name, api_key_name)
+    return model.embed(embeddings_request)

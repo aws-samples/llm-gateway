@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Body
 from fastapi.responses import StreamingResponse
 
 from api.auth import api_key_auth, get_api_key_name
-from api.models import get_model
+from api.models.bedrock import BedrockModel
 from api.schema import ChatRequest, ChatResponse, ChatStreamResponse
 from api.setting import DEFAULT_MODEL
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -20,7 +20,7 @@ router = APIRouter(
 security = HTTPBearer()
 
 
-@router.post("/completions", response_model=ChatResponse | ChatStreamResponse, response_model_exclude_none=True)
+@router.post("/completions", response_model=ChatResponse | ChatStreamResponse, response_model_exclude_unset=True)
 async def chat_completions(
         chat_request: Annotated[
             ChatRequest,
@@ -50,7 +50,8 @@ async def chat_completions(
         chat_request.model = DEFAULT_MODEL
         
     # Exception will be raised if model not supported.
-    model = get_model(chat_request.model)
+    model = BedrockModel()
+    model.validate(chat_request)
     if chat_request.stream:
         return StreamingResponse(
             content=model.chat_stream(chat_request, user_name, api_key_name), media_type="text/event-stream"
