@@ -26,7 +26,7 @@ module "llm_gateway_rest_apikey_handler" {
   vpc_security_group_ids             = [aws_security_group.llm_gateway_rest_apikey_lambda_function_security_group.id]
   attach_network_policy              = true
   replace_security_groups_on_destroy = true
-  replacement_security_group_ids = [local.vpc_default_security_group_id]
+  replacement_security_group_ids     = [local.vpc_replacement_security_group_ids]
 
   environment_variables = {
     API_KEY_TABLE_NAME : aws_dynamodb_table.llm_gateway_rest_apikey.name,
@@ -39,20 +39,20 @@ module "llm_gateway_rest_apikey_handler" {
   timeout = 900
 
   allowed_triggers = {
-    "APIGatewayAny" = {
-      service    = "apigateway"
-      source_arn = "${aws_api_gateway_rest_api.llm_gateway_rest_api.execution_arn}/*/*"
-    }
+    "ALB" = {
+        service    = "elasticloadbalancing"
+        source_arn = aws_alb_target_group.llm_gateway_rest_apikey_handler_target_group.arn
+      }
   }
 
   attach_policy_statements = true
   policy_statements = {
 
-    api_gateway = {
-      effect  = "Allow",
-      actions = ["execute-api:Invoke", "execute-api:ManageConnections"],
-      "resources" : ["arn:aws:execute-api:${local.region}:${local.account}:${aws_api_gateway_rest_api.llm_gateway_rest_api.id}/*"],
-    }
+    #    api_gateway = {
+    #      effect  = "Allow",
+    #      actions = ["execute-api:Invoke", "execute-api:ManageConnections"],
+    #      "resources" : ["arn:aws:execute-api:${local.region}:${local.account}:${aws_api_gateway_rest_api.llm_gateway_rest_api.id}/*"],
+    #    }
 
     kms_decrypt = {
       effect = "Allow",
@@ -103,69 +103,41 @@ module "llm_gateway_rest_apikey_handler" {
 
   }
   package_type = "Image"
-  image_uri    = "${data.aws_ecr_repository.apiKeyEcrRepo.repository_url}:latest"
+  image_uri    = "${data.aws_ecr_repository.api_key_ecr_repo.repository_url}:latest"
 
   cloudwatch_logs_kms_key_id = local.kms_key_arn
   tags                       = local.tags
 }
 
-
-
-resource "aws_api_gateway_resource" "llm_gateway_rest_apikey_resource" {
-  parent_id   = aws_api_gateway_rest_api.llm_gateway_rest_api.root_resource_id
-  path_part   = "apikey"
-  rest_api_id = aws_api_gateway_rest_api.llm_gateway_rest_api.id
+resource "aws_alb_target_group" "llm_gateway_rest_apikey_handler_target_group" {
+  name_prefix = local.apikey.prefix
+  vpc_id               = local.vpc_id
+  target_type          = "lambda"
 }
 
-resource "aws_api_gateway_method" "llm_gateway_rest_apikey_method_get" {
-  authorization = "CUSTOM"
-  authorizer_id = aws_api_gateway_authorizer.llm_gateway_rest_authorizer.id
-  http_method   = "GET"
-  resource_id   = aws_api_gateway_resource.llm_gateway_rest_apikey_resource.id
-  rest_api_id   = aws_api_gateway_rest_api.llm_gateway_rest_api.id
+resource "aws_alb_listener_rule" "llm_gateway_rest_apikey_handler_rule" {
+  listener_arn = local.loadbalancer.listener_arn
+  priority = local.apikey.priority
+  action {
+    type = "forward"
+    target_group_arn = aws_alb_target_group.llm_gateway_rest_apikey_handler_target_group.arn
+  }
+
+  condition {
+    host_header {
+      values = [local.api_domain_name]
+    }
+  }
+
+  condition {
+    path_pattern {
+      values = [local.apikey.path]
+    }
+  }
+
 }
 
-resource "aws_api_gateway_method" "llm_gateway_rest_apikey_method_post" {
-  authorization = "CUSTOM"
-  authorizer_id = aws_api_gateway_authorizer.llm_gateway_rest_authorizer.id
-  http_method   = "POST"
-  resource_id   = aws_api_gateway_resource.llm_gateway_rest_apikey_resource.id
-  rest_api_id   = aws_api_gateway_rest_api.llm_gateway_rest_api.id
-}
-
-resource "aws_api_gateway_method" "llm_gateway_rest_apikey_method_delete" {
-  authorization = "CUSTOM"
-  authorizer_id = aws_api_gateway_authorizer.llm_gateway_rest_authorizer.id
-  http_method   = "DELETE"
-  resource_id   = aws_api_gateway_resource.llm_gateway_rest_apikey_resource.id
-  rest_api_id   = aws_api_gateway_rest_api.llm_gateway_rest_api.id
-}
-
-resource "aws_api_gateway_integration" "llm_gateway_rest_apikey_method_get_integration" {
-  http_method             = aws_api_gateway_method.llm_gateway_rest_apikey_method_get.http_method
-  resource_id             = aws_api_gateway_resource.llm_gateway_rest_apikey_resource.id
-  rest_api_id             = aws_api_gateway_rest_api.llm_gateway_rest_api.id
-  type                    = "AWS_PROXY"
-  integration_http_method = "POST"
-
-  uri = module.llm_gateway_rest_apikey_handler.lambda_function_invoke_arn
-}
-
-resource "aws_api_gateway_integration" "llm_gateway_rest_apikey_method_post_integration" {
-  http_method             = aws_api_gateway_method.llm_gateway_rest_apikey_method_post.http_method
-  resource_id             = aws_api_gateway_resource.llm_gateway_rest_apikey_resource.id
-  rest_api_id             = aws_api_gateway_rest_api.llm_gateway_rest_api.id
-  type                    = "AWS_PROXY"
-  integration_http_method = "POST"
-
-  uri = module.llm_gateway_rest_apikey_handler.lambda_function_invoke_arn
-}
-
-resource "aws_api_gateway_integration" "llm_gateway_rest_apikey_method_delete_integration" {
-  http_method             = aws_api_gateway_method.llm_gateway_rest_apikey_method_delete.http_method
-  resource_id             = aws_api_gateway_resource.llm_gateway_rest_apikey_resource.id
-  rest_api_id             = aws_api_gateway_rest_api.llm_gateway_rest_api.id
-  integration_http_method = "POST"
-  type                    = "AWS_PROXY"
-  uri                     = module.llm_gateway_rest_apikey_handler.lambda_function_invoke_arn
+resource "aws_alb_target_group_attachment" "llm_gateway_rest_apikey_handler_target_group_attachment" {
+  target_group_arn = aws_alb_target_group.llm_gateway_rest_apikey_handler_target_group.arn
+  target_id        = module.llm_gateway_rest_apikey_handler.lambda_function_arn
 }

@@ -1,7 +1,7 @@
 # Common Inputs
 
 variable "name" {
-  type    = string
+  type = string
 }
 
 variable "region" {
@@ -24,25 +24,27 @@ variable "architectures" {
 }
 
 # All ECR repositories
-variable "apiKeyEcrRepo" {
+variable "api_key_ecr_repo" {
   type = string
 }
 
-variable "llmGatewayEcrRepo" {
+variable "llm_gateway_ecr_repo" {
   type = string
 }
 
-variable "quotaEcrRepo" {
+variable "quota_ecr_repo" {
   type = string
 }
 
-variable "modelAccessEcrRepo" {
+variable "model_access_ecr_repo" {
   type = string
 }
 
-variable "streamlitEcrRepo" {
+variable "streamlit_ecr_repo" {
   type = string
 }
+
+
 
 
 
@@ -60,40 +62,22 @@ variable "private_subnet_ids" {
   type = list(string)
 }
 
-variable "vpc_default_security_group_id" {
+variable "vpc_replacement_security_group_id" {
   type = string
 }
 
 
 # Load balancer related  input
 
-variable "streamlit_certificate_arn" {
-  type    = string
-  default = null
-}
-
-variable "llmgateway_certificate_arn" {
-  type    = string
-  default = null
-}
-
-variable "streamlit_target_group_arn" {
+variable "llm_gateway_loadbalancer_listener_arn" {
   type = string
 }
 
-variable "streamlit_loadbalancer_security_group_id" {
+variable "llm_gateway_loadbalancer_security_group_id" {
   type = string
 }
 
-variable "llmgateway_target_group_arn" {
-  type = string
-}
-
-variable "llmgatereway_loadbalancer_security_group_id" {
-  type = string
-}
-
-variable "llmgateway_loadbalancer_dns_name" {
+variable "llm_gateway_loadbalancer_dns_name" {
   type = string
 }
 
@@ -113,7 +97,11 @@ variable "kms_key_arn" {
   type = string
 }
 
-variable "domain_name" {
+variable "api_domain_name" {
+  type = string
+}
+
+variable "ui_domain_name" {
   type = string
 }
 
@@ -145,17 +133,4 @@ variable "default_max_temp" {
 
 variable "salt" {
   type = string
-}
-
-# Api Gateway Input
-
-variable "api_endpoint_configuration" {
-  type = string
-  validation {
-    condition     = contains(["REGIONAL", "PRIVATE"], var.api_endpoint_configuration)
-    error_message = "allowed values are REGIONAL or PRIVATE"
-  }
-}
-variable "api_interface_endpoints" {
-  type = list(string)
 }

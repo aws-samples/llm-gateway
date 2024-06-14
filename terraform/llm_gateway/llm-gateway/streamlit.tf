@@ -1,3 +1,54 @@
+resource "aws_alb_target_group" "streamlit_target_group" {
+  name_prefix = local.streamlit_ui.prefix
+
+  vpc_id = local.vpc_id
+  protocol = "HTTP"
+  port                      = local.streamlit_ui.container_port
+  target_type                       = "ip"
+  deregistration_delay              = 5
+  load_balancing_cross_zone_enabled = true
+
+  health_check  {
+    enabled             = true
+    healthy_threshold   = 5
+    interval            = 30
+    matcher             = "200"
+    path                = "/healthz"
+    port                = "traffic-port"
+    protocol            = "HTTP"
+    timeout             = 5
+    unhealthy_threshold = 2
+  }
+}
+
+resource "aws_alb_listener_rule" "streamlit_listener_rule" {
+  listener_arn = local.loadbalancer.listener_arn
+  priority     = local.streamlit_ui.priority
+
+  action {
+    type             = "authenticate-cognito"
+    authenticate_cognito {
+      user_pool_arn       = local.user_pool_arn
+      user_pool_client_id = local.user_pool_app_client_id
+      user_pool_domain    = local.user_pool_domain
+      on_unauthenticated_request = "authenticate"
+    }
+  }
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_alb_target_group.streamlit_target_group.arn
+  }
+
+  condition {
+    host_header {
+      values = [local.ui_domain_name]
+    }
+  }
+}
+
+
+
 module "streamlit" {
   source  = "terraform-aws-modules/ecs/aws//modules/service"
   version = "5.11.2"
@@ -48,15 +99,7 @@ module "streamlit" {
       environment = [
         {
           name  = "LlmGatewayUrl"
-          value = "https://${local.llm_gateway.alb_dns_name}/api/v1"
-        },
-        {
-          name  = "ApiGatewayURL"
-          value = "${aws_api_gateway_stage.llm_gateway_rest_api_stage.invoke_url}/"
-        },
-        {
-          name  = "ApiGatewayModelAccessURL"
-          value = "${aws_api_gateway_stage.llm_gateway_rest_api_stage.invoke_url}/"
+          value = "https://${local.loadbalancer.alb_dns_name}"
         },
         {
           name  = "Region"
@@ -68,7 +111,7 @@ module "streamlit" {
         },
         {
           name  = "CognitoClientId"
-          value = local.app_client_id
+          value = local.user_pool_app_client_id
         },
         {
           name  = "AdminList"
@@ -101,7 +144,7 @@ module "streamlit" {
   load_balancer = {
 
     service = {
-      target_group_arn = local.streamlit_ui.target_group_arn
+      target_group_arn = aws_alb_target_group.streamlit_target_group.arn
       container_name   = local.streamlit_ui.container_name
       container_port   = local.streamlit_ui.container_port
     }
@@ -117,7 +160,8 @@ module "streamlit" {
       to_port                  = local.streamlit_ui.container_port
       protocol                 = "tcp"
       description              = "Service port"
-      source_security_group_id = local.streamlit_ui.alb_security_group_id
+      source_security_group_id = local.loadbalancer.alb_security_group_id
+
     }
 
     egress_all = {
