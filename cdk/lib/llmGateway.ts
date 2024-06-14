@@ -21,6 +21,7 @@ import * as targets from 'aws-cdk-lib/aws-elasticloadbalancingv2-targets';
 import * as ssm from "aws-cdk-lib/aws-ssm";
 import * as lambdaPython from '@aws-cdk/aws-lambda-python-alpha'
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
+import * as kms from 'aws-cdk-lib/aws-kms';
 
 export class LlmGatewayStack extends cdk.Stack {
   stackPrefix = "LlmGateway";
@@ -146,13 +147,14 @@ export class LlmGatewayStack extends cdk.Stack {
     });
   }
 
-  createSecureDdbTable(tableName: string, partitionKeyName: string) {
+  createSecureDdbTable(tableName: string, partitionKeyName: string, kmsKey: kms.Key) {
     const table = new dynamodb.Table(this, tableName, {
       partitionKey: {
         name: partitionKeyName,
         type: dynamodb.AttributeType.STRING,
       },
-      encryption: dynamodb.TableEncryption.AWS_MANAGED,
+      encryption: dynamodb.TableEncryption.CUSTOMER_MANAGED,
+      encryptionKey: kmsKey,
       pointInTimeRecovery: true,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
@@ -164,7 +166,8 @@ export class LlmGatewayStack extends cdk.Stack {
     partitionKeyName: string,
     sortKeyName: string,
     secondaryIndexName: string | null,
-    secondaryIndexPartitionKeyName: string | null
+    secondaryIndexPartitionKeyName: string | null,
+    kmsKey: kms.Key
   ) {
     const table = new dynamodb.Table(this, tableName, {
       partitionKey: {
@@ -175,7 +178,8 @@ export class LlmGatewayStack extends cdk.Stack {
         name: sortKeyName,
         type: dynamodb.AttributeType.STRING,
       },
-      encryption: dynamodb.TableEncryption.AWS_MANAGED,
+      encryption: dynamodb.TableEncryption.CUSTOMER_MANAGED,
+      encryptionKey: kmsKey,
       pointInTimeRecovery: true,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
@@ -197,7 +201,6 @@ export class LlmGatewayStack extends cdk.Stack {
 
   createLlmGatewayRole(
     roleName: string,
-    chatHistoryTable: dynamodb.Table,
     quotaTable: dynamodb.Table,
     modelAccessTable: dynamodb.Table,
     requestDetailsTable: dynamodb.Table,
@@ -206,7 +209,8 @@ export class LlmGatewayStack extends cdk.Stack {
     secret: secretsmanager.Secret,
     defaultQuotaParameter: ssm.StringParameter,
     defaultModelAccessParameter: ssm.StringParameter,
-    assumedBy: iam.ServicePrincipal
+    assumedBy: iam.ServicePrincipal,
+    kmsKey: kms.Key
   ) {
     const resourceArn = null;
     return new iam.Role(this, roleName, {
@@ -236,7 +240,7 @@ export class LlmGatewayStack extends cdk.Stack {
                 "dynamodb:Scan",
                 "dynamodb:UpdateItem",
               ],
-              resources: [chatHistoryTable.tableArn, apiKeyTable.tableArn, `${apiKeyTable.tableArn}/index/${apiKeyValueHashIndex}`, quotaTable.tableArn, modelAccessTable.tableArn, requestDetailsTable.tableArn],
+              resources: [apiKeyTable.tableArn, `${apiKeyTable.tableArn}/index/${apiKeyValueHashIndex}`, quotaTable.tableArn, modelAccessTable.tableArn, requestDetailsTable.tableArn],
             }),
             new iam.PolicyStatement({
               effect: iam.Effect.ALLOW,
@@ -265,7 +269,19 @@ export class LlmGatewayStack extends cdk.Stack {
               actions: ['ssm:GetParameter'],
               resources: [defaultModelAccessParameter.parameterArn],
               effect: iam.Effect.ALLOW
-            })
+            }),
+            new iam.PolicyStatement({
+              sid: "KmsDecrypt",
+              effect: iam.Effect.ALLOW,
+              actions: [
+                "kms:Encrypt",
+                "kms:Decrypt",
+                "kms:ReEncrypt*",
+                "kms:GenerateDataKey*",
+                "kms:DescribeKey"
+              ],
+              resources: [kmsKey.keyArn],
+            }),
           ],
         }),
       },
@@ -276,7 +292,8 @@ export class LlmGatewayStack extends cdk.Stack {
     roleName: string, 
     apiKeyTable: dynamodb.ITable,
     apiKeyValueHashIndex: string,
-    secret: secretsmanager.ISecret
+    secret: secretsmanager.ISecret,
+    kmsKey: kms.Key
   ) {
     return new iam.Role(this, roleName, {
       assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
@@ -316,6 +333,18 @@ export class LlmGatewayStack extends cdk.Stack {
               ],
               resources: ["*"],
             }),
+            new iam.PolicyStatement({
+              sid: "KmsDecrypt",
+              effect: iam.Effect.ALLOW,
+              actions: [
+                "kms:Encrypt",
+                "kms:Decrypt",
+                "kms:ReEncrypt*",
+                "kms:GenerateDataKey*",
+                "kms:DescribeKey"
+              ],
+              resources: [kmsKey.keyArn],
+            }),
           ]
         })
       }
@@ -328,7 +357,8 @@ export class LlmGatewayStack extends cdk.Stack {
     defaultQuotaParameter:ssm.StringParameter,
     apiKeyTable: dynamodb.ITable,
     apiKeyValueHashIndex: string,
-    secret: secretsmanager.ISecret
+    secret: secretsmanager.ISecret,
+    kmsKey: kms.Key
   ) {
     return new iam.Role(this, roleName, {
       assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
@@ -372,7 +402,19 @@ export class LlmGatewayStack extends cdk.Stack {
               actions: ['ssm:GetParameter'],
               resources: [defaultQuotaParameter.parameterArn],
               effect: iam.Effect.ALLOW
-            })
+            }),
+            new iam.PolicyStatement({
+              sid: "KmsDecrypt",
+              effect: iam.Effect.ALLOW,
+              actions: [
+                "kms:Encrypt",
+                "kms:Decrypt",
+                "kms:ReEncrypt*",
+                "kms:GenerateDataKey*",
+                "kms:DescribeKey"
+              ],
+              resources: [kmsKey.keyArn],
+            }),
           ]
         })
       }
@@ -385,7 +427,8 @@ export class LlmGatewayStack extends cdk.Stack {
     defaultModelAccessParameter:ssm.StringParameter,
     apiKeyTable: dynamodb.ITable,
     apiKeyValueHashIndex: string,
-    secret: secretsmanager.ISecret
+    secret: secretsmanager.ISecret,
+    kmsKey: kms.Key
   ) {
     return new iam.Role(this, roleName, {
       assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
@@ -429,7 +472,19 @@ export class LlmGatewayStack extends cdk.Stack {
               actions: ['ssm:GetParameter'],
               resources: [defaultModelAccessParameter.parameterArn],
               effect: iam.Effect.ALLOW
-            })
+            }),
+            new iam.PolicyStatement({
+              sid: "KmsDecrypt",
+              effect: iam.Effect.ALLOW,
+              actions: [
+                "kms:Encrypt",
+                "kms:Decrypt",
+                "kms:ReEncrypt*",
+                "kms:GenerateDataKey*",
+                "kms:DescribeKey"
+              ],
+              resources: [kmsKey.keyArn],
+            }),
           ]
         })
       }
@@ -470,12 +525,49 @@ export class LlmGatewayStack extends cdk.Stack {
   }
 
   createAlbApi(
-    chatHistoryTable: dynamodb.Table,
     apiKeyEcr: ecr.IRepository,
     llmGatewayApiEcr: ecr.IRepository,
     quotaEcr: ecr.IRepository,
     modelAccessEcr: ecr.IRepository
   ) {
+
+    const kmsKey = new kms.Key(this, "llmGatewayKmsKey", {
+      keyUsage: kms.KeyUsage.ENCRYPT_DECRYPT,
+      description: "llmGatewayKmsKey",
+      enabled: true,
+      alias: "llmGatewayKmsKey",
+      enableKeyRotation: true,
+      policy: new iam.PolicyDocument({
+        statements: [
+          new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: ['kms:*'],  // Granting all KMS actions
+            resources: ['*'],    // Applies to all resources
+            principals: [new iam.ArnPrincipal(`arn:aws:iam::${cdk.Aws.ACCOUNT_ID}:root`)],
+          }),
+          new iam.PolicyStatement({
+            sid: "KmsDecrypt",
+            effect: iam.Effect.ALLOW,
+            actions: [
+              "kms:Encrypt*",
+              "kms:Decrypt*",
+              "kms:ReEncrypt*",
+              "kms:GenerateDataKey*",
+              "kms:Describe*"
+            ],
+            resources: ["*"],
+            principals: [new iam.ServicePrincipal("logs.amazonaws.com")],
+            conditions: {
+              'ArnLike': {
+                'kms:EncryptionContext:aws:logs:arn': `arn:aws:logs:${cdk.Aws.REGION}:${cdk.Aws.ACCOUNT_ID}:log-group:*`
+              }
+            }
+          }),
+        ],
+      }),
+    })
+
+
     let parameterValue: { [key: string]: string } = {};
     parameterValue[this.defaultQuotaFrequency] = this.defaultQuotaDollars;
 
@@ -506,6 +598,7 @@ export class LlmGatewayStack extends cdk.Stack {
     const modelAccessTable = this.createSecureDdbTable(
       this.modelAccessTableName,
       this.modelAccessTablePartitionKey,
+      kmsKey
     )
 
     const quotaTable = this.createSecureDdbTableWithSortKey(
@@ -513,7 +606,8 @@ export class LlmGatewayStack extends cdk.Stack {
       this.quotaTablePartitionKey,
       this.quotaTableSortKey,
       null,
-      null
+      null,
+      kmsKey
     )
 
     const requestDetailsTable = this.createSecureDdbTableWithSortKey(
@@ -521,17 +615,19 @@ export class LlmGatewayStack extends cdk.Stack {
       this.requestDetailsTablePartitionKey,
       this.requestDetailsTableSortKey,
       null,
-      null
+      null,
+      kmsKey
     )
 
-    const saltSecret = this.createSaltSecret()
+    const saltSecret = this.createSaltSecret(kmsKey)
 
     const apiKeyTable = this.createSecureDdbTableWithSortKey(
       this.apiKeyTableName,
       this.apiKeyTablePartitionKey,
       this.apiKeyTableSortKey,
       this.apiKeyValueHashIndex, 
-      this.apiKeyTableIndexPartitionKey
+      this.apiKeyTableIndexPartitionKey,
+      kmsKey
     )
 
     this.setUpCognito()
@@ -548,7 +644,6 @@ export class LlmGatewayStack extends cdk.Stack {
     let targetGroupLlmGateway :elbv2.ApplicationTargetGroup;
 
     const environment = {
-      CHAT_HISTORY_TABLE_NAME: chatHistoryTable.tableName,
       REGION: this.regionValue,
       COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix,
       API_KEY_TABLE_NAME: apiKeyTable.tableName,
@@ -591,7 +686,6 @@ export class LlmGatewayStack extends cdk.Stack {
     if (this.serverlessApi) {
       const lambdaRole = this.createLlmGatewayRole(
         "llmGatewayLambdaRole",
-        chatHistoryTable,
         quotaTable,
         modelAccessTable,
         requestDetailsTable,
@@ -600,7 +694,8 @@ export class LlmGatewayStack extends cdk.Stack {
         saltSecret,
         defaultQuotaParameter,
         defaultModelAccessParameter,
-        new iam.ServicePrincipal("lambda.amazonaws.com")
+        new iam.ServicePrincipal("lambda.amazonaws.com"),
+        kmsKey
       )
       const fn = new lambda.DockerImageFunction(this, "llmGatewayLambda", {
         code: lambda.DockerImageCode.fromEcr(llmGatewayApiEcr, { tag: "latest" }),
@@ -629,12 +724,12 @@ export class LlmGatewayStack extends cdk.Stack {
 
       const logGroup = new logs.LogGroup(this, 'llmGatewayLogGroup', {
         logGroupName: '/ecs/LlmGateway/Api',
-        removalPolicy: cdk.RemovalPolicy.DESTROY
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+        encryptionKey: kmsKey
       });
 
       const ecsExecutionRole = this.createLlmGatewayRole(
         "llmGatewayEcsRole",
-        chatHistoryTable,
         quotaTable,
         modelAccessTable,
         requestDetailsTable,
@@ -643,7 +738,8 @@ export class LlmGatewayStack extends cdk.Stack {
         saltSecret,
         defaultQuotaParameter,
         defaultModelAccessParameter,
-        new iam.ServicePrincipal('ecs-tasks.amazonaws.com')
+        new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
+        kmsKey
       )
       ecsExecutionRole.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonECSTaskExecutionRolePolicy'));
 
@@ -772,28 +868,35 @@ export class LlmGatewayStack extends cdk.Stack {
       description: 'The url of the llmgateway private application load balancer'
     });
 
-    this.createApiKeyHandlerApi(llmGatewayAlb, llmGatewayAppListener, apiKeyTable, saltSecret, vpcParams, apiKeyEcr)
-    this.createQuotaHandlerApi(llmGatewayAlb, llmGatewayAppListener, apiKeyTable, saltSecret, quotaTable, vpcParams, quotaEcr, defaultQuotaParameter)
-    this.createModelAccessHandlerApi(llmGatewayAlb, llmGatewayAppListener, apiKeyTable, saltSecret, modelAccessTable, vpcParams, modelAccessEcr, defaultModelAccessParameter)
+    this.createApiKeyHandlerApi(llmGatewayAlb, llmGatewayAppListener, apiKeyTable, saltSecret, vpcParams, apiKeyEcr, kmsKey)
+    this.createQuotaHandlerApi(llmGatewayAlb, llmGatewayAppListener, apiKeyTable, saltSecret, quotaTable, vpcParams, quotaEcr, defaultQuotaParameter, kmsKey)
+    this.createModelAccessHandlerApi(llmGatewayAlb, llmGatewayAppListener, apiKeyTable, saltSecret, modelAccessTable, vpcParams, modelAccessEcr, defaultModelAccessParameter, kmsKey)
 
 
-    this.setUpStreamlit(llmGatewayAlb, llmGatewayAppListener, llmGatewayAlbSecurityGroup, cluster, vpc, LlmGatewayUrl)
+    this.setUpStreamlit(llmGatewayAlb, llmGatewayAppListener, llmGatewayAlbSecurityGroup, cluster, vpc, LlmGatewayUrl, kmsKey)
   }
 
-  createSaltSecret() : secretsmanager.Secret {
+  createSaltSecret(kmsKey: kms.Key) : secretsmanager.Secret {
     return new secretsmanager.Secret(this, 'MySaltSecret', {
       generateSecretString: {
         secretStringTemplate: JSON.stringify({ salt: this.salt }),
         generateStringKey: 'dummyKey'  // Required by AWS but not used since we provide the complete template
-      }
+      },
+      encryptionKey: kmsKey
     });
   }
 
-  createModelAccessHandlerApi(lb: elbv2.ApplicationLoadBalancer, appListener:elbv2.ApplicationListener, apiKeyTable: dynamodb.ITable, saltSecret: secretsmanager.ISecret, modelAccessTable: dynamodb.ITable, vpcParams: object, modelAccessEcr: ecr.IRepository, defaultModelAccessParameter:ssm.StringParameter) {
+  createModelAccessHandlerApi(lb: elbv2.ApplicationLoadBalancer, appListener:elbv2.ApplicationListener, apiKeyTable: dynamodb.ITable, saltSecret: secretsmanager.ISecret, modelAccessTable: dynamodb.ITable, vpcParams: object, modelAccessEcr: ecr.IRepository, defaultModelAccessParameter:ssm.StringParameter, ksmKey: kms.Key) {
+    const logGroup = new logs.LogGroup(this, 'ModelAccessHandlerLogGroup', {
+      logGroupName: 'ModelAccessHandlerLogGroup',
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      encryptionKey: ksmKey
+    });
+    
     const modelAccessHandler = new lambda.DockerImageFunction(this, 'modelAccessHandler', {
       functionName: this.modelAccessHandlerFunctionName,
       code: lambda.DockerImageCode.fromEcr(modelAccessEcr, { tag: "latest" }),
-      role: this.createModelAccessLambdaRole("modelAccessHandlerRole", modelAccessTable, defaultModelAccessParameter, apiKeyTable, this.apiKeyValueHashIndex, saltSecret),
+      role: this.createModelAccessLambdaRole("modelAccessHandlerRole", modelAccessTable, defaultModelAccessParameter, apiKeyTable, this.apiKeyValueHashIndex, saltSecret, ksmKey),
       architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
       environment: {
         REGION: this.regionValue,
@@ -811,6 +914,7 @@ export class LlmGatewayStack extends cdk.Stack {
       timeout: cdk.Duration.minutes(15),
       memorySize: 512,
       ...vpcParams,
+      logGroup: logGroup
     });
 
     const lambdaTarget = new targets.LambdaTarget(modelAccessHandler)
@@ -833,12 +937,17 @@ export class LlmGatewayStack extends cdk.Stack {
     });
   }
 
-  createQuotaHandlerApi(lb: elbv2.ApplicationLoadBalancer, appListener:elbv2.ApplicationListener, apiKeyTable: dynamodb.ITable, saltSecret: secretsmanager.ISecret, quotaTable: dynamodb.ITable, vpcParams: object, quotaHandlerEcr: ecr.IRepository, defaultQuotaParameter:ssm.StringParameter) {
+  createQuotaHandlerApi(lb: elbv2.ApplicationLoadBalancer, appListener:elbv2.ApplicationListener, apiKeyTable: dynamodb.ITable, saltSecret: secretsmanager.ISecret, quotaTable: dynamodb.ITable, vpcParams: object, quotaHandlerEcr: ecr.IRepository, defaultQuotaParameter:ssm.StringParameter, ksmKey: kms.Key) {
+    const logGroup = new logs.LogGroup(this, 'QuotaHandlerLogGroup', {
+      logGroupName: 'QuotaHandlerLogGroup',
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      encryptionKey: ksmKey
+    });
 
     const quotaHandler = new lambda.DockerImageFunction(this, 'quotaHandler', {
       functionName: this.quotaHandlerFunctionName,
       code: lambda.DockerImageCode.fromEcr(quotaHandlerEcr, { tag: "latest" }),
-      role: this.createQuotaLambdaRole("quotaHandlerRole", quotaTable, defaultQuotaParameter, apiKeyTable, this.apiKeyValueHashIndex, saltSecret),
+      role: this.createQuotaLambdaRole("quotaHandlerRole", quotaTable, defaultQuotaParameter, apiKeyTable, this.apiKeyValueHashIndex, saltSecret, ksmKey),
       architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
       environment: {
         REGION: this.regionValue,
@@ -856,6 +965,7 @@ export class LlmGatewayStack extends cdk.Stack {
       timeout: cdk.Duration.minutes(15),
       memorySize: 512,
       ...vpcParams,
+      logGroup: logGroup
     });
 
     const lambdaTarget = new targets.LambdaTarget(quotaHandler)
@@ -878,11 +988,17 @@ export class LlmGatewayStack extends cdk.Stack {
     });
   }
 
-  createApiKeyHandlerApi(lb: elbv2.ApplicationLoadBalancer, appListener:elbv2.ApplicationListener, apiKeyTable: dynamodb.ITable, saltSecret: secretsmanager.ISecret, vpcParams: object, apiKeyEcr: ecr.IRepository) {
+  createApiKeyHandlerApi(lb: elbv2.ApplicationLoadBalancer, appListener:elbv2.ApplicationListener, apiKeyTable: dynamodb.ITable, saltSecret: secretsmanager.ISecret, vpcParams: object, apiKeyEcr: ecr.IRepository, ksmKey: kms.Key) {
+    const logGroup = new logs.LogGroup(this, 'ApiKeyHandlerLogGroup', {
+      logGroupName: 'ApiKeyHandlerLogGroup',
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      encryptionKey: ksmKey
+    });
+    
     const apiKeyHandler = new lambda.DockerImageFunction(this, 'apiKeyHandler', {
       functionName: this.apiKeyHandlerFunctionName,
       code: lambda.DockerImageCode.fromEcr(apiKeyEcr, { tag: "latest" }),
-      role: this.createApiKeyLambdaRole("apiKeyHandlerRole", apiKeyTable, this.apiKeyValueHashIndex, saltSecret),
+      role: this.createApiKeyLambdaRole("apiKeyHandlerRole", apiKeyTable, this.apiKeyValueHashIndex, saltSecret, ksmKey),
       architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
       environment: {
         API_KEY_TABLE_NAME: apiKeyTable.tableName,
@@ -898,6 +1014,7 @@ export class LlmGatewayStack extends cdk.Stack {
       timeout: cdk.Duration.minutes(15),
       memorySize: 512,
       ...vpcParams,
+      logGroup: logGroup
     });
 
     const lambdaTarget = new targets.LambdaTarget(apiKeyHandler)
@@ -1056,10 +1173,11 @@ export class LlmGatewayStack extends cdk.Stack {
         });
   }
 
-  setUpStreamlit(lb: elbv2.ApplicationLoadBalancer, appListener:elbv2.ApplicationListener, albSecurityGroup: ec2.SecurityGroup, cluster: ecs.Cluster, vpc: ec2.Vpc, llmGatewayUrl: string) {
+  setUpStreamlit(lb: elbv2.ApplicationLoadBalancer, appListener:elbv2.ApplicationListener, albSecurityGroup: ec2.SecurityGroup, cluster: ecs.Cluster, vpc: ec2.Vpc, llmGatewayUrl: string, kmsKey: kms.Key) {
     const logGroup = new logs.LogGroup(this, 'AppLogGroup', {
       logGroupName: '/ecs/LlmGateway/StreamlitUI',
-      removalPolicy: cdk.RemovalPolicy.DESTROY
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      encryptionKey: kmsKey
     });
 
     const ecsExecutionRole = new iam.Role(this, 'EcsExecutionRole', {
@@ -1068,6 +1186,18 @@ export class LlmGatewayStack extends cdk.Stack {
     });
 
     ecsExecutionRole.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonECSTaskExecutionRolePolicy'));
+    ecsExecutionRole.addToPolicy(new iam.PolicyStatement({
+      sid: "KmsDecrypt",
+      effect: iam.Effect.ALLOW,
+      actions: [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:ReEncrypt*",
+        "kms:GenerateDataKey*",
+        "kms:DescribeKey"
+      ],
+      resources: [kmsKey.keyArn],
+    }))
 
     const taskDefinition = new ecs.FargateTaskDefinition(this, 'TaskDef', {
       memoryLimitMiB: 512,
@@ -1187,12 +1317,6 @@ export class LlmGatewayStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    // Create a chat history database.
-    const chatHistoryTable = this.createSecureDdbTable(
-      this.chatHistoryTableName,
-      "id"
-    );
-
     // Create a table for storing costs of using different LLMs.
     //const costTable = this.createSecureDdbTable("CostTable", "id");
     //const costLambda = this.createTokenCountLambda("CostLambda", costTable);
@@ -1220,6 +1344,6 @@ export class LlmGatewayStack extends cdk.Stack {
       this.modelAccessRepoName!
     );
 
-    this.createAlbApi(chatHistoryTable, apiKeyEcrRepo, llmGatewayEcrRepo, quotaEcrRepo, modelAccessEcrRepo)
+    this.createAlbApi(apiKeyEcrRepo, llmGatewayEcrRepo, quotaEcrRepo, modelAccessEcrRepo)
   }
 }
