@@ -9,7 +9,7 @@ locals {
   vpc_cidr                     = var.vpc_cidr
   azs                          = slice(data.aws_availability_zones.available.names, 0, 2)
   kms_key_arn                  = var.kms_key_arn
-  private_gateway_loadbalancer = var.private_llmgateway_loadbalancer
+  private_gateway_loadbalancer = var.private_llm_gateway_loadbalancer
   architectures                = var.architectures
 
   domain_name           = var.domain_name
@@ -20,10 +20,7 @@ locals {
     "${local.ui_domain}/oauth2/idpresponse"
   ]
 
-  api_endpoint_configuration = var.api_endpoint_configuration
-
   gateway_certificate_arn = var.gateway_certificate_arn
-  ui_certificate_arn      = var.ui_certificate_arn
 
   admin_list = var.adminList
 

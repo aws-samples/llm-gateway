@@ -1,3 +1,48 @@
+resource "aws_alb_target_group" "llm_gateway_target_group" {
+
+  name_prefix = local.llm_gateway.prefix
+
+  protocol                          = "HTTP"
+  port                              = local.llm_gateway.container_port
+  target_type                       = "ip"
+  deregistration_delay              = 5
+  load_balancing_cross_zone_enabled = true
+  vpc_id                            = local.vpc_id
+  health_check {
+    enabled             = true
+    healthy_threshold   = 5
+    interval            = 30
+    matcher             = "200"
+    path                = "/health"
+    port                = "traffic-port"
+    protocol            = "HTTP"
+    timeout             = 5
+    unhealthy_threshold = 2
+  }
+}
+
+resource "aws_lb_listener_rule" "llm_gateway_listener_rule" {
+  listener_arn = local.loadbalancer.listener_arn
+  priority     = local.llm_gateway.priority
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_alb_target_group.llm_gateway_target_group.arn
+  }
+
+  condition {
+    host_header {
+      values = [local.api_domain_name]
+    }
+  }
+
+  condition {
+    path_pattern {
+      values = [local.llm_gateway.path]
+    }
+  }
+}
+
 module "ecs" {
   source  = "terraform-aws-modules/ecs/aws//modules/service"
   version = "5.11.2"
@@ -38,14 +83,13 @@ module "ecs" {
       cpu       = 512
       memory    = 1024
       essential = true
-      image     = local.llmgateway_uri
+      image     = local.llm_gateway_uri
       runtime_platform = {
         operating_system_family = "LINUX"
         cpu_architecture        = upper(local.architectures)
       }
       environment = [
         {
-
           name  = "CHAT_HISTORY_TABLE_NAME"
           value = aws_dynamodb_table.llm_gateway_rest_chat_history.name
         },
@@ -87,7 +131,7 @@ module "ecs" {
         {
 
           name  = "APP_CLIENT_ID"
-          value = local.app_client_id
+          value = local.user_pool_app_client_id
         },
         {
 
@@ -153,7 +197,7 @@ module "ecs" {
 
   load_balancer = {
     service = {
-      target_group_arn = local.llm_gateway.target_group_arn
+      target_group_arn = aws_alb_target_group.llm_gateway_target_group.arn
       container_name   = local.llm_gateway.container_name
       container_port   = local.llm_gateway.container_port
     }
@@ -174,13 +218,13 @@ module "ecs" {
       actions   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
       resources = ["*"]
     },
-    {
-      effect  = "Allow",
-      actions = ["execute-api:Invoke", "execute-api:ManageConnections"],
-      "resources" : [
-        "arn:aws:execute-api:${local.region}:${local.account}:${aws_api_gateway_rest_api.llm_gateway_rest_api.arn}/*"
-      ],
-    },
+    #    {
+    #      effect  = "Allow",
+    #      actions = ["execute-api:Invoke", "execute-api:ManageConnections"],
+    #      "resources" : [
+    #        "arn:aws:execute-api:${local.region}:${local.account}:${aws_api_gateway_rest_api.llm_gateway_rest_api.arn}/*"
+    #      ],
+    #    },
     {
       effect = "Allow",
       actions = [
@@ -210,7 +254,7 @@ module "ecs" {
         "kms:GenerateDataKey*",
         "kms:DescribeKey"
       ],
-      "resources" : [local.kms_key_arn ],
+      "resources" : [local.kms_key_arn],
     },
     {
       effect = "Allow",
@@ -245,12 +289,12 @@ module "ecs" {
   security_group_rules = {
 
     alb_ingress = {
-      type        = "ingress"
-      from_port   = local.llm_gateway.container_port
-      to_port     = local.llm_gateway.container_port
-      protocol    = "tcp"
-      description = "Service port"
-      source_security_group_id = local.llm_gateway.alb_security_group_id
+      type                     = "ingress"
+      from_port                = local.llm_gateway.container_port
+      to_port                  = local.llm_gateway.container_port
+      protocol                 = "tcp"
+      description              = "Service port"
+      source_security_group_id = local.loadbalancer.alb_security_group_id
     }
 
     egress_all = {

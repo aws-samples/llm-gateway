@@ -31,37 +31,29 @@ variable "kms_key_arn" {
 }
 
 # ECR repositories
-variable "apiKeyEcrRepo" {
+variable "api_key_ecr_repo" {
   type = string
 }
 
-variable "llmGatewayEcrRepo" {
+variable "llm_gateway_ecr_repo" {
   type = string
 }
 
-variable "quotaEcrRepo" {
+variable "quota_ecr_repo" {
   type = string
 }
 
-variable "modelAccessEcrRepo" {
+variable "model_access_ecr_repo" {
   type = string
 }
 
-variable "streamlitEcrRepo" {
+variable "streamlit_ecr_repo" {
   type = string
 }
 
 
-variable "private_llmgateway_loadbalancer" {
-  type    = bool
-}
-
-variable "api_endpoint_configuration" {
-  type = string
-  validation {
-    condition     = contains(["REGIONAL", "PRIVATE"], var.api_endpoint_configuration)
-    error_message = "allowed values are REGIONAL or PRIVATE"
-  }
+variable "private_llm_gateway_loadbalancer" {
+  type = bool
 }
 
 variable "ui_certificate_arn" {
