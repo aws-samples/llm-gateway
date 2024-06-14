@@ -24,7 +24,7 @@ show_pages(
 )
 add_indentation()
 
-ApiKeyURL = os.environ["ApiGatewayURL"] + "apikey"
+ApiKeyURL = os.environ["LlmGatewayUrl"] + "/apikey"
 
 def process_access_token():
     headers = _get_websocket_headers()

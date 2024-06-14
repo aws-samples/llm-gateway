@@ -183,19 +183,19 @@ def get_user_name_api_key(authorization_header):
         return None
 
 def unauthorized_response():
-    return {
+    return (None, {
                     "statusCode": 403,
                     "body": json.dumps({"message": "Unauthorized"})
-    }
+    })
 
-def authorized_response():
-    return None
+def authorized_response(user_name):
+    return (user_name, None)
 
 def get_cached_authorization(token, current_method):
     get_from_cache(token+current_method)
 
-def cache_authorized(token, current_method):
-    add_to_cache(token+current_method, authorized_cache_value)
+def cache_authorized(token, current_method, user_name):
+    add_to_cache(token+current_method, authorized_cache_value + ":" + user_name)
 
 def cache_unauthorized(token, current_method):
     add_to_cache(token+current_method, unauthorized_cache_value)
@@ -203,19 +203,20 @@ def cache_unauthorized(token, current_method):
 def auth_handler(event, current_method):
     try:
         headers = event["headers"]
-        authorization_header = headers["Authorization"]
+        authorization_header = headers["authorization"]
         #get JWT token after Bearer from authorization
         token = authorization_header.split(" ")
         if (token[0] != 'Bearer'):
-            raise Exception('Authorization header should have a format Bearer <JWT> Token')
+            raise Exception('authorization header should have a format Bearer <JWT> Token')
         bearer_token = token[1]
 
         cached_auth_response = get_cached_authorization(bearer_token, current_method)
         if cached_auth_response:
             logger.info(f'Cached response value for passed in token: {cached_auth_response}')
-            if cached_auth_response == authorized_cache_value:
-                return authorized_response()
-            elif cached_auth_response == unauthorized_cache_value:
+            if cached_auth_response.startswith(authorized_cache_value):
+                user_name = authorized_cache_value.split(":")[1]
+                return authorized_response(user_name)
+            elif cached_auth_response.startswith(unauthorized_cache_value):
                 return unauthorized_response()
             else:
                 logger.error("unexpected cached auth value.")
@@ -253,19 +254,19 @@ def auth_handler(event, current_method):
             return unauthorized_response()
         elif user_name in ADMIN_LIST:
             logger.info(f"Access granted for user admin {user_name}")
-            cache_authorized(bearer_token, current_method)
-            return authorized_response()
+            cache_authorized(bearer_token, current_method, user_name)
+            return authorized_response(user_name)
         elif current_method in NON_ADMIN_ENDPOINTS:
             logger.info(f"Access granted for user developer {user_name}")
-            cache_authorized(bearer_token, current_method)
-            authorized_response()
+            cache_authorized(bearer_token, current_method, user_name)
+            authorized_response(user_name)
         else:
             logger.info(f"Access denied for user developer {user_name}")
             cache_unauthorized(bearer_token, current_method)
             return unauthorized_response()
     except Exception as e:
         logger.error(f"Failed to authorize with error {e}")
-        return {
+        return (None, {
                 "statusCode": 403,
                 "body": json.dumps({"message": "Access Denied."})
-            }
+            })

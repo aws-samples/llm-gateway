@@ -1,4 +1,3 @@
-import * as apigw from "aws-cdk-lib/aws-apigateway";
 import * as cdk from "aws-cdk-lib";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
@@ -13,9 +12,6 @@ import * as path from "path";
 import * as wafv2 from "aws-cdk-lib/aws-wafv2";
 import { Construct } from "constructs";
 import { HttpMethod } from "aws-cdk-lib/aws-events";
-import { WebSocketLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
-import * as apigwv2 from "aws-cdk-lib/aws-apigatewayv2";
-import * as apigatewayv2_auth from "aws-cdk-lib/aws-apigatewayv2-authorizers"
 import * as lambdaNode from "aws-cdk-lib/aws-lambda-nodejs"
 import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2"
 import * as elbv2Actions from "aws-cdk-lib/aws-elasticloadbalancingv2-actions";
@@ -24,16 +20,7 @@ import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as targets from 'aws-cdk-lib/aws-elasticloadbalancingv2-targets';
 import * as ssm from "aws-cdk-lib/aws-ssm";
 import * as lambdaPython from '@aws-cdk/aws-lambda-python-alpha'
-
-/* At present, this repository supports:
- *  "ai21.j2-mid-v1": {},
- *  "ai21.j2-ultra-v1": {},
- *  "amazon.titan-embed-text-v1": {},
- *  "anthropic.claude-v2": {},
- *  "anthropic.claude-v1": {},
- *  "anthropic.claude-instant-v1": {},
- *  "cohere.command-text-v14": {},
- */
+import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 
 export class LlmGatewayStack extends cdk.Stack {
   stackPrefix = "LlmGateway";
@@ -46,7 +33,6 @@ export class LlmGatewayStack extends cdk.Stack {
   vpcSubnets = process.env.VPC_SUBNETS || null;
   vpcSecurityGroup = process.env.VPC_SECURITY_GROUP || null;
   architecture = this.node.tryGetContext('architecture');
-  apiGatewayType = this.node.tryGetContext("apiGatewayType");
   streamlitEcrRepoName = String(this.node.tryGetContext("ecrStreamlitRepository"));
   uiCertArn = String(this.node.tryGetContext("uiCertArn"));
   uiDomainName = String(this.node.tryGetContext("uiDomainName"));
@@ -709,90 +695,6 @@ export class LlmGatewayStack extends cdk.Stack {
       });
     }
 
-    const api = new apigw.RestApi(this, "LlmGatewayApiGateway", {
-      defaultCorsPreflightOptions: {
-        allowOrigins: apigw.Cors.ALL_ORIGINS,
-        allowMethods: apigw.Cors.ALL_METHODS,  // Make sure POST is included
-        allowHeaders: ['Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent'],
-        allowCredentials: true,
-      },
-    });
-
-    const authHandlerRole = new iam.Role(this, "AuthHandlerRole", {
-      assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
-      roleName: "AuthHandlerRole",
-      inlinePolicies: {
-        LambdaPermissions: new iam.PolicyDocument({
-          statements: [
-            new iam.PolicyStatement({
-              sid: "WriteToCloudWatchLogs",
-              effect: iam.Effect.ALLOW,
-              actions: [
-                "logs:CreateLogGroup",
-                "logs:CreateLogStream",
-                "logs:PutLogEvents",
-              ],
-              resources: ["*"],
-            }),
-            new iam.PolicyStatement({
-              effect: iam.Effect.ALLOW,
-              actions: [
-                "secretsmanager:GetSecretValue",
-                "secretsmanager:DescribeSecret"
-              ],
-              resources: [saltSecret.secretArn]  // Restrict policy to this specific secret
-            }),
-            new iam.PolicyStatement({
-              sid: "HistoryDynamoDBAccess",
-              effect: iam.Effect.ALLOW,
-              actions: [
-                "dynamodb:BatchWriteItem",
-                "dynamodb:DeleteItem",
-                "dynamodb:GetItem",
-                "dynamodb:PutItem",
-                "dynamodb:Query",
-                "dynamodb:Scan",
-                "dynamodb:UpdateItem",
-              ],
-              resources: [apiKeyTable.tableArn, `${apiKeyTable.tableArn}/index/${this.apiKeyValueHashIndex}`],
-            })
-          ],
-        }),
-      },
-    })
-
-    const authHandler = new lambdaPython.PythonFunction(this, 'AuthHandlerFunction', {
-      entry: path.join(__dirname, "../../lambdas/authorizer"),
-      index: 'app.py',
-      handler: 'handler',
-      runtime: lambda.Runtime.PYTHON_3_12,
-      architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
-      environment: {
-            USER_POOL_ID: this.userPool.userPoolId,
-            APP_CLIENT_ID: this.applicationLoadBalanceruserPoolClient.userPoolClientId,
-            ADMIN_LIST: this.adminList,
-            COGNITO_DOMAIN_PREFIX: this.cognitoDomainPrefix,
-            REGION: this.regionValue,
-            NON_ADMIN_ENDPOINTS: this.nonAdminEndpoints,
-            API_KEY_EXCLUDED_ENDPOINTS: this.apiKeyExcludedEndpoints,
-            SALT_SECRET: saltSecret.secretName,
-            API_KEY_TABLE_NAME: apiKeyTable.tableName
-          },
-      role: authHandlerRole
-    });
-
-    const authorizer = new apigw.TokenAuthorizer(this,
-      "Authorizer",
-      {
-        handler: authHandler,
-        identitySource: "method.request.header.Authorization",
-      },
-    )
-
-    this.createApiKeyHandlerApi(api, authorizer, apiKeyTable, saltSecret, vpcParams, apiKeyEcr)
-    this.createQuotaHandlerApi(api, authorizer, apiKeyTable, saltSecret, quotaTable, vpcParams, quotaEcr, defaultQuotaParameter)
-    this.createModelAccessHandlerApi(api, authorizer, apiKeyTable, saltSecret, modelAccessTable, vpcParams, modelAccessEcr, defaultModelAccessParameter)
-
     let llmGatewayAlb : elbv2.ApplicationLoadBalancer;
     if (this.llmGatewayIsPublic) {
       llmGatewayAlb = new elbv2.ApplicationLoadBalancer(this, 'PublicLlmGatewayAlb', {
@@ -815,8 +717,7 @@ export class LlmGatewayStack extends cdk.Stack {
       port: 443,
       protocol: elbv2.ApplicationProtocol.HTTPS,
       certificates: [
-        { certificateArn: this.llmGatewayCertArn },
-        { certificateArn: this.uiCertArn }
+        { certificateArn: this.llmGatewayCertArn }
       ],
       defaultAction: elbv2.ListenerAction.fixedResponse(200, {
         contentType: "text/plain",
@@ -824,9 +725,12 @@ export class LlmGatewayStack extends cdk.Stack {
       }),
     });
 
-    llmGatewayAppListener.addAction('ForwardToLambdaAction', {
-      priority: 10,
-      conditions: [elbv2.ListenerCondition.hostHeaders([this.llmGatewayDomainName])],
+    const llmGatewayUiCert = acm.Certificate.fromCertificateArn(this, 'llmGatewayUiCert', this.uiCertArn);
+    llmGatewayAppListener.addCertificates("llmGatewayUiCert", [llmGatewayUiCert])
+
+    llmGatewayAppListener.addAction('ForwardToLlmGatewayEcsAction', {
+      priority: 20,
+      conditions: [elbv2.ListenerCondition.hostHeaders([this.llmGatewayDomainName]), elbv2.ListenerCondition.pathPatterns(['/api/v1*'])],
       action: elbv2.ListenerAction.forward([targetGroupLlmGateway])
     });
 
@@ -862,14 +766,18 @@ export class LlmGatewayStack extends cdk.Stack {
       })
     });
 
-    const LlmGatewayUrl = "https://" + this.llmGatewayDomainName + "/api/v1"
+    const LlmGatewayUrl = "https://" + this.llmGatewayDomainName
     new cdk.CfnOutput(this, 'LlmGatewayUrl', {
       value: LlmGatewayUrl,
       description: 'The url of the llmgateway private application load balancer'
     });
 
-    //Replace api.apiEndpoint with the url of the application load balancer
-    this.setUpStreamlit(llmGatewayAlb, llmGatewayAppListener, llmGatewayAlbSecurityGroup, cluster, vpc, LlmGatewayUrl, api)
+    this.createApiKeyHandlerApi(llmGatewayAlb, llmGatewayAppListener, apiKeyTable, saltSecret, vpcParams, apiKeyEcr)
+    this.createQuotaHandlerApi(llmGatewayAlb, llmGatewayAppListener, apiKeyTable, saltSecret, quotaTable, vpcParams, quotaEcr, defaultQuotaParameter)
+    this.createModelAccessHandlerApi(llmGatewayAlb, llmGatewayAppListener, apiKeyTable, saltSecret, modelAccessTable, vpcParams, modelAccessEcr, defaultModelAccessParameter)
+
+
+    this.setUpStreamlit(llmGatewayAlb, llmGatewayAppListener, llmGatewayAlbSecurityGroup, cluster, vpc, LlmGatewayUrl)
   }
 
   createSaltSecret() : secretsmanager.Secret {
@@ -881,7 +789,7 @@ export class LlmGatewayStack extends cdk.Stack {
     });
   }
 
-  createModelAccessHandlerApi(api: apigw.RestApi, authorizer: apigw.TokenAuthorizer, apiKeyTable: dynamodb.ITable, saltSecret: secretsmanager.ISecret, modelAccessTable: dynamodb.ITable, vpcParams: object, modelAccessEcr: ecr.IRepository, defaultModelAccessParameter:ssm.StringParameter){
+  createModelAccessHandlerApi(lb: elbv2.ApplicationLoadBalancer, appListener:elbv2.ApplicationListener, apiKeyTable: dynamodb.ITable, saltSecret: secretsmanager.ISecret, modelAccessTable: dynamodb.ITable, vpcParams: object, modelAccessEcr: ecr.IRepository, defaultModelAccessParameter:ssm.StringParameter) {
     const modelAccessHandler = new lambda.DockerImageFunction(this, 'modelAccessHandler', {
       functionName: this.modelAccessHandlerFunctionName,
       code: lambda.DockerImageCode.fromEcr(modelAccessEcr, { tag: "latest" }),
@@ -905,40 +813,27 @@ export class LlmGatewayStack extends cdk.Stack {
       ...vpcParams,
     });
 
-    const modelAccessResource = api.root.addResource('modelaccess');
+    const lambdaTarget = new targets.LambdaTarget(modelAccessHandler)
 
-    // Add GET endpoint
-    modelAccessResource.addMethod('GET', new apigw.LambdaIntegration(modelAccessHandler), {
-      authorizer: authorizer
+    const targetGroup = new elbv2.ApplicationTargetGroup(this, 'LlmGatewayModelAccessLambda', {
+      targetGroupName: 'LlmGatewayModelAccessLambda',
+      targetType: elbv2.TargetType.LAMBDA,
+      targets: [lambdaTarget]
     });
 
-    // Add a new resource for the currentuser under modelaccess
-    const currentuserResource = modelAccessResource.addResource('currentuser');
-
-    // Add GET method for the /modelaccess/currentusersummary endpoint
-    currentuserResource.addMethod('GET', new apigw.LambdaIntegration(modelAccessHandler), {
-      authorizer: authorizer
-    });
-
-    // Add POST endpoint
-    modelAccessResource.addMethod('POST', new apigw.LambdaIntegration(modelAccessHandler), {
-      authorizer: authorizer
-    });
-
-    // Add DELETE endpoint
-    modelAccessResource.addMethod('DELETE', new apigw.LambdaIntegration(modelAccessHandler), {
-      authorizer: authorizer
+    appListener.addAction('ForwardToModelAccessLambdaAction', {
+      priority: 30,
+      conditions: [elbv2.ListenerCondition.hostHeaders([this.llmGatewayDomainName]), elbv2.ListenerCondition.pathPatterns(['/modelaccess*'])],
+      action: elbv2.ListenerAction.forward([targetGroup])
     });
 
     new cdk.CfnOutput(this, 'ModelAccessLambdaFunctionName', {
       value: modelAccessHandler.functionName,
       description: 'Name of the model access lambda function'
     });
-
-    return api
   }
 
-  createQuotaHandlerApi(api: apigw.RestApi, authorizer: apigw.TokenAuthorizer, apiKeyTable: dynamodb.ITable, saltSecret: secretsmanager.ISecret, quotaTable: dynamodb.ITable, vpcParams: object, quotaHandlerEcr: ecr.IRepository, defaultQuotaParameter:ssm.StringParameter) {
+  createQuotaHandlerApi(lb: elbv2.ApplicationLoadBalancer, appListener:elbv2.ApplicationListener, apiKeyTable: dynamodb.ITable, saltSecret: secretsmanager.ISecret, quotaTable: dynamodb.ITable, vpcParams: object, quotaHandlerEcr: ecr.IRepository, defaultQuotaParameter:ssm.StringParameter) {
 
     const quotaHandler = new lambda.DockerImageFunction(this, 'quotaHandler', {
       functionName: this.quotaHandlerFunctionName,
@@ -963,49 +858,27 @@ export class LlmGatewayStack extends cdk.Stack {
       ...vpcParams,
     });
 
-    const quotaResource = api.root.addResource('quota');
+    const lambdaTarget = new targets.LambdaTarget(quotaHandler)
 
-    // Add GET endpoint
-    quotaResource.addMethod('GET', new apigw.LambdaIntegration(quotaHandler), {
-      authorizer: authorizer
+    const targetGroup = new elbv2.ApplicationTargetGroup(this, 'LlmGatewayQuotaLambda', {
+      targetGroupName: 'LlmGatewayQuotaLambda',
+      targetType: elbv2.TargetType.LAMBDA,
+      targets: [lambdaTarget]
     });
 
-    // Add a new resource for the summary under quota
-    const summaryResource = quotaResource.addResource('summary');
-
-    // Add a new resource for the summary under quota
-    const currentusersummaryResource = quotaResource.addResource('currentusersummary');
-
-    // Add GET method for the /quota/summary endpoint
-    summaryResource.addMethod('GET', new apigw.LambdaIntegration(quotaHandler), {
-        authorizer: authorizer
-    });
-
-    // Add GET method for the /quota/currentusersummary endpoint
-    currentusersummaryResource.addMethod('GET', new apigw.LambdaIntegration(quotaHandler), {
-      authorizer: authorizer
-    });
-
-    // Add POST endpoint
-    quotaResource.addMethod('POST', new apigw.LambdaIntegration(quotaHandler), {
-      authorizer: authorizer
-    });
-
-    // Add DELETE endpoint
-    quotaResource.addMethod('DELETE', new apigw.LambdaIntegration(quotaHandler), {
-      authorizer: authorizer
+    appListener.addAction('ForwardToQuotaLambdaAction', {
+      priority: 40,
+      conditions: [elbv2.ListenerCondition.hostHeaders([this.llmGatewayDomainName]), elbv2.ListenerCondition.pathPatterns(['/quota*'])],
+      action: elbv2.ListenerAction.forward([targetGroup])
     });
 
     new cdk.CfnOutput(this, 'QuotaLambdaFunctionName', {
       value: quotaHandler.functionName,
       description: 'Name of the quota lambda function'
     });
-
-    return api
-
   }
 
-  createApiKeyHandlerApi(api: apigw.RestApi, authorizer: apigw.TokenAuthorizer, apiKeyTable: dynamodb.ITable, saltSecret: secretsmanager.ISecret, vpcParams: object, apiKeyEcr: ecr.IRepository) : apigw.RestApi {
+  createApiKeyHandlerApi(lb: elbv2.ApplicationLoadBalancer, appListener:elbv2.ApplicationListener, apiKeyTable: dynamodb.ITable, saltSecret: secretsmanager.ISecret, vpcParams: object, apiKeyEcr: ecr.IRepository) {
     const apiKeyHandler = new lambda.DockerImageFunction(this, 'apiKeyHandler', {
       functionName: this.apiKeyHandlerFunctionName,
       code: lambda.DockerImageCode.fromEcr(apiKeyEcr, { tag: "latest" }),
@@ -1027,29 +900,24 @@ export class LlmGatewayStack extends cdk.Stack {
       ...vpcParams,
     });
 
-    const apiKeyResource = api.root.addResource('apikey');
+    const lambdaTarget = new targets.LambdaTarget(apiKeyHandler)
 
-    // Add GET endpoint
-    apiKeyResource.addMethod('GET', new apigw.LambdaIntegration(apiKeyHandler), {
-      authorizer: authorizer
+    const targetGroup = new elbv2.ApplicationTargetGroup(this, 'LlmGatewayApiKeyLambda', {
+      targetGroupName: 'LlmGatewayApiKeyLambda',
+      targetType: elbv2.TargetType.LAMBDA,
+      targets: [lambdaTarget]
     });
 
-    // Add POST endpoint
-    apiKeyResource.addMethod('POST', new apigw.LambdaIntegration(apiKeyHandler), {
-      authorizer: authorizer
-    });
-
-    // Add DELETE endpoint
-    apiKeyResource.addMethod('DELETE', new apigw.LambdaIntegration(apiKeyHandler), {
-      authorizer: authorizer
+    appListener.addAction('ForwardToApiKeyLambdaAction', {
+      priority: 50,
+      conditions: [elbv2.ListenerCondition.hostHeaders([this.llmGatewayDomainName]), elbv2.ListenerCondition.pathPatterns(['/apikey*'])],
+      action: elbv2.ListenerAction.forward([targetGroup])
     });
 
     new cdk.CfnOutput(this, 'ApiKeyLambdaFunctionName', {
       value: this.apiKeyHandlerFunctionName,
       description: 'Name of the api key lambda function'
     });
-
-    return api
   }
 
   setUpCognito() {
@@ -1188,7 +1056,7 @@ export class LlmGatewayStack extends cdk.Stack {
         });
   }
 
-  setUpStreamlit(lb: elbv2.ApplicationLoadBalancer, appListener:elbv2.ApplicationListener, albSecurityGroup: ec2.SecurityGroup, cluster: ecs.Cluster, vpc: ec2.Vpc, llmGatewayUrl: string, apiGatewayApi: apigw.RestApi) {
+  setUpStreamlit(lb: elbv2.ApplicationLoadBalancer, appListener:elbv2.ApplicationListener, albSecurityGroup: ec2.SecurityGroup, cluster: ecs.Cluster, vpc: ec2.Vpc, llmGatewayUrl: string) {
     const logGroup = new logs.LogGroup(this, 'AppLogGroup', {
       logGroupName: '/ecs/LlmGateway/StreamlitUI',
       removalPolicy: cdk.RemovalPolicy.DESTROY
@@ -1222,7 +1090,6 @@ export class LlmGatewayStack extends cdk.Stack {
       logging: ecs.LogDrivers.awsLogs({ logGroup, streamPrefix: 'streamlit' }),
       environment: {
         LlmGatewayUrl: llmGatewayUrl,
-        ApiGatewayURL: apiGatewayApi.url,
         AdminList: this.adminList,
         Region: this.regionValue,
         CognitoDomainPrefix: this.cognitoDomainPrefix,
@@ -1269,7 +1136,7 @@ export class LlmGatewayStack extends cdk.Stack {
       description: 'Name of the llmgateway ecs task'
     });
 
-    const targetGroup = new elbv2.ApplicationTargetGroup(this, 'AppTG', {
+    const targetGroup = new elbv2.ApplicationTargetGroup(this, 'LlmGatewayUI', {
       vpc,
       targetGroupName: 'LlmGatewayUI',
       protocol: elbv2.ApplicationProtocol.HTTP,
@@ -1279,7 +1146,7 @@ export class LlmGatewayStack extends cdk.Stack {
     });
 
     appListener.addAction("authenticate-cognito", {
-      priority: 20,
+      priority: 10,
       conditions: [elbv2.ListenerCondition.hostHeaders([this.uiDomainName])],
       action: new elbv2Actions.AuthenticateCognitoAction({
         userPool:this.userPool,
@@ -1319,15 +1186,6 @@ export class LlmGatewayStack extends cdk.Stack {
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
-
-    // Create API Gateway resources.
-
-    // const modelPolicyStore = this.createSecureDdbTable(
-    //   this.stackPrefix + "ModelPolicyStore",
-    //   "id"
-    // );
-    //const modelEngineName = this.stackPrefix + "ModelEngine";
-    //const modelEngine = this.createSecureDdbTable(modelEngineName, "id");
 
     // Create a chat history database.
     const chatHistoryTable = this.createSecureDdbTable(

@@ -113,11 +113,6 @@ def get_quota_summary(username, table, response):
                 "body": json.dumps({"message": str(e)})
             }
 
-def get_user_name(event):
-    username = event['requestContext']['authorizer']['username']
-    print(f'username: {username}')
-    return username
-
 def lambda_handler(event, context):
     """
     :param event: A dict that contains request data, query string parameters, and
@@ -130,12 +125,11 @@ def lambda_handler(event, context):
     path = event['path']
     print(f'http_method: {http_method}. path: {path}')
 
-    error_response = auth_handler(event, path)
+    caller_username, error_response = auth_handler(event, path)
     if error_response:
         return error_response
 
     table = boto3.resource("dynamodb").Table(QUOTA_TABLE_NAME)
-    headers = event["headers"]
 
     query_params = event.get('queryStringParameters') or {}  # Use an empty dict as a default
     username = query_params.get('username', None)
@@ -155,8 +149,7 @@ def lambda_handler(event, context):
         if error:
             return error
     elif http_method == 'GET' and path == "/quota/currentusersummary":
-        username = get_user_name(event)
-        error = get_quota_summary(username, table, response)
+        error = get_quota_summary(caller_username, table, response)
         if error:
             return error
     elif http_method == 'GET' and path == "/quota":
