@@ -1,14 +1,14 @@
 resource "aws_alb_target_group" "streamlit_target_group" {
   name_prefix = local.streamlit_ui.prefix
 
-  vpc_id = local.vpc_id
-  protocol = "HTTP"
-  port                      = local.streamlit_ui.container_port
+  vpc_id                            = local.vpc_id
+  protocol                          = "HTTP"
+  port                              = local.streamlit_ui.container_port
   target_type                       = "ip"
   deregistration_delay              = 5
   load_balancing_cross_zone_enabled = true
 
-  health_check  {
+  health_check {
     enabled             = true
     healthy_threshold   = 5
     interval            = 30
@@ -26,11 +26,11 @@ resource "aws_alb_listener_rule" "streamlit_listener_rule" {
   priority     = local.streamlit_ui.priority
 
   action {
-    type             = "authenticate-cognito"
+    type = "authenticate-cognito"
     authenticate_cognito {
-      user_pool_arn       = local.user_pool_arn
-      user_pool_client_id = local.user_pool_app_client_id
-      user_pool_domain    = local.user_pool_domain
+      user_pool_arn              = local.user_pool_arn
+      user_pool_client_id        = local.user_pool_app_client_id
+      user_pool_domain           = local.user_pool_domain
       on_unauthenticated_request = "authenticate"
     }
   }

@@ -33,11 +33,11 @@ module "llm_gateway_rest_apikey_handler" {
     COGNITO_DOMAIN_PREFIX : local.cognito_domain_prefix,
     REGION : local.region,
     SALT_SECRET : aws_secretsmanager_secret.llm_gateway_rest_secret_salt.name
-    NON_ADMIN_ENDPOINTS: local.non_admin_endpoints,
-    API_KEY_EXCLUDED_ENDPOINTS: local.api_key_excluded_endpoints,
-    USER_POOL_ID: local.user_pool_id,
-    APP_CLIENT_ID: local.user_pool_app_client_id,
-    ADMIN_LIST: local.admin_list,
+    NON_ADMIN_ENDPOINTS : local.non_admin_endpoints,
+    API_KEY_EXCLUDED_ENDPOINTS : local.api_key_excluded_endpoints,
+    USER_POOL_ID : local.user_pool_id,
+    APP_CLIENT_ID : local.user_pool_app_client_id,
+    ADMIN_LIST : local.admin_list,
   }
 
 
@@ -46,9 +46,9 @@ module "llm_gateway_rest_apikey_handler" {
 
   allowed_triggers = {
     "ALB" = {
-        service    = "elasticloadbalancing"
-        source_arn = aws_alb_target_group.llm_gateway_rest_apikey_handler_target_group.arn
-      }
+      service    = "elasticloadbalancing"
+      source_arn = aws_alb_target_group.llm_gateway_rest_apikey_handler_target_group.arn
+    }
   }
 
   attach_policy_statements = true
@@ -117,15 +117,15 @@ module "llm_gateway_rest_apikey_handler" {
 
 resource "aws_alb_target_group" "llm_gateway_rest_apikey_handler_target_group" {
   name_prefix = local.apikey.prefix
-  vpc_id               = local.vpc_id
-  target_type          = "lambda"
+  vpc_id      = local.vpc_id
+  target_type = "lambda"
 }
 
 resource "aws_alb_listener_rule" "llm_gateway_rest_apikey_handler_rule" {
   listener_arn = local.loadbalancer.listener_arn
-  priority = local.apikey.priority
+  priority     = local.apikey.priority
   action {
-    type = "forward"
+    type             = "forward"
     target_group_arn = aws_alb_target_group.llm_gateway_rest_apikey_handler_target_group.arn
   }
 

@@ -2,12 +2,12 @@ resource "aws_alb_target_group" "llm_gateway_target_group" {
 
   name_prefix = local.llm_gateway.prefix
 
-  protocol     = "HTTP"
-  port                 = local.llm_gateway.container_port
+  protocol                          = "HTTP"
+  port                              = local.llm_gateway.container_port
   target_type                       = "ip"
   deregistration_delay              = 5
   load_balancing_cross_zone_enabled = true
-  vpc_id = local.vpc_id
+  vpc_id                            = local.vpc_id
   health_check {
     enabled             = true
     healthy_threshold   = 5
@@ -195,13 +195,13 @@ module "ecs" {
   }
 
 
-    load_balancer = {
-      service = {
-        target_group_arn = aws_alb_target_group.llm_gateway_target_group.arn
-        container_name   = local.llm_gateway.container_name
-        container_port   = local.llm_gateway.container_port
-      }
+  load_balancer = {
+    service = {
+      target_group_arn = aws_alb_target_group.llm_gateway_target_group.arn
+      container_name   = local.llm_gateway.container_name
+      container_port   = local.llm_gateway.container_port
     }
+  }
 
   subnet_ids = local.private_subnet_ids
 

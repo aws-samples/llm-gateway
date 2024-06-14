@@ -34,12 +34,12 @@ module "llm_gateway_rest_quota_handler" {
     QUOTA_TABLE_NAME : aws_dynamodb_table.llm_gateway_rest_quota.name,
     DEFAULT_QUOTA_PARAMETER_NAME : aws_ssm_parameter.llm_gateway_rest_ssm_parameter_default_quota.name
     COGNITO_DOMAIN_PREFIX : local.cognito_domain_prefix
-    NON_ADMIN_ENDPOINTS: local.non_admin_endpoints,
-    API_KEY_EXCLUDED_ENDPOINTS: local.api_key_excluded_endpoints,
-    USER_POOL_ID: local.user_pool_id,
-    APP_CLIENT_ID: local.user_pool_app_client_id,
-    ADMIN_LIST: local.admin_list,
-    API_KEY_TABLE_NAME: aws_dynamodb_table.llm_gateway_rest_apikey.name
+    NON_ADMIN_ENDPOINTS : local.non_admin_endpoints,
+    API_KEY_EXCLUDED_ENDPOINTS : local.api_key_excluded_endpoints,
+    USER_POOL_ID : local.user_pool_id,
+    APP_CLIENT_ID : local.user_pool_app_client_id,
+    ADMIN_LIST : local.admin_list,
+    API_KEY_TABLE_NAME : aws_dynamodb_table.llm_gateway_rest_apikey.name
     SALT_SECRET : aws_secretsmanager_secret.llm_gateway_rest_secret_salt.name
 
   }
@@ -123,15 +123,15 @@ module "llm_gateway_rest_quota_handler" {
 
 resource "aws_alb_target_group" "llm_gateway_rest_quota_handler_target_group" {
   name_prefix = local.quota.prefix
-  vpc_id               = local.vpc_id
-  target_type          = "lambda"
+  vpc_id      = local.vpc_id
+  target_type = "lambda"
 }
 
 resource "aws_alb_listener_rule" "llm_gateway_rest_quota_handler_rule" {
   listener_arn = local.loadbalancer.listener_arn
-  priority = local.quota.priority
+  priority     = local.quota.priority
   action {
-    type = "forward"
+    type             = "forward"
     target_group_arn = aws_alb_target_group.llm_gateway_rest_quota_handler_target_group.arn
   }
 
