@@ -8,6 +8,7 @@ import uuid
 import secrets
 import hashlib
 from botocore.exceptions import ClientError
+from common.auth import auth_handler
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -16,13 +17,11 @@ logger.setLevel(logging.INFO)
 DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 # Chat history.
 API_KEY_TABLE_NAME = os.environ.get("API_KEY_TABLE_NAME", None)
-COGNITO_DOMAIN_PREFIX = os.environ.get("COGNITO_DOMAIN_PREFIX")
 
 REGION = os.environ.get("REGION")
 SALT_SECRET = os.environ.get("SALT_SECRET")
 
 secrets_manager_client = boto3.client("secretsmanager")
-
 
 def get_salt():
     try:
@@ -50,28 +49,6 @@ class Settings:
 
 ## END NETWORK ANALYSIS ########################################################
 ## BEGIN WEBSOCKETS ############################################################
-
-def get_user_name(event):
-    username = event['requestContext']['authorizer']['username']
-    print(f'username: {username}')
-    return username
-
-def get_user_info(authorization_header):
-    url = f'https://{COGNITO_DOMAIN_PREFIX}.auth.{REGION}.amazoncognito.com/oauth2/userInfo'
-
-    # Set the headers with the access token
-    headers = {
-        'Authorization': authorization_header
-    }
-
-    # Make the HTTP GET request to the User Info endpoint
-    response = requests.get(url, headers=headers, timeout=60)
-
-    # Check if the request was successful
-    if response.status_code == 200:
-        return response.json()  # Returns the user info as a JSON object
-    else:
-        return response.status_code, response.text  # Returns error status and message if not successful
 
 def generate_api_key(key_size=32):
   """Generates a cryptographically secure API key of specified size in bytes.
@@ -115,16 +92,14 @@ def lambda_handler(event, context):
              result of handling the event.
     """
     http_method = event.get('httpMethod')
+    path = event['path']
+    print(f'http_method: {http_method}. path: {path}')
+
+    username, error_response = auth_handler(event, path)
+    if error_response:
+        return error_response
+
     table = boto3.resource("dynamodb").Table(API_KEY_TABLE_NAME)
-    headers = event["headers"]
-    username = ""
-    if not headers or "Authorization" not in headers:
-        response = {
-                "statusCode": 500,
-                "body": json.dumps({"message": str("Unexpected lack of authorization header.")})
-            }
-    else:
-        username = get_user_name(event)
 
     response = {"statusCode": 200}
 

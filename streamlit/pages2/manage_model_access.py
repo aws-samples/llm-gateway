@@ -23,7 +23,7 @@ show_pages(
 )
 add_indentation()
 
-ModelAccessURL = os.environ["ApiGatewayURL"] + "modelaccess"
+ModelAccessURL = os.environ["LlmGatewayUrl"] + "/modelaccess"
 region = os.environ["Region"]
 
 #map for us-east-1, us-west-2, ap-south-1, 
@@ -152,11 +152,15 @@ def fetch_and_display_model_access(username):
 def update_model_access_config(username, new_access_list):
     access_token = process_access_token()
     if access_token:
-        headers = {"Authorization": f"Bearer {access_token}"}
+        headers_post = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
         body = {'model_access_list': ','.join(new_access_list)}
         params = {"username": username}
         
-        update_response = requests.post(ModelAccessURL, headers=headers, json=body, params=params, timeout=60)
+        update_response = requests.post(ModelAccessURL, headers=headers_post, json=body, params=params, timeout=60)
         if update_response.status_code == 200:
             st.success('Model access updated successfully.')
             fetch_and_display_model_access(username)

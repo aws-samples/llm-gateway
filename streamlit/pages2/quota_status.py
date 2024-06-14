@@ -22,7 +22,7 @@ show_pages(
 )
 add_indentation()
 
-QuotaURL = os.environ["ApiGatewayURL"] + "quota" + "/summary"
+QuotaURL = os.environ["LlmGatewayUrl"] + "/quota" + "/summary"
 
 def process_access_token():
     headers = _get_websocket_headers()

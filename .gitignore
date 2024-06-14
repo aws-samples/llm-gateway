@@ -12,3 +12,6 @@ cdk/outputs.json
 cdk/resources.txt
 scripts/resources.txt
 cdk/salt.txt
+lambdas/api_key/common
+lambdas/model_access/common
+lambdas/quota/common

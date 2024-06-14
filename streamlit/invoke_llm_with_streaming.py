@@ -7,7 +7,7 @@ import openai
 load_dotenv()
 
 
-LlmGatewayUrl = os.environ["LlmGatewayUrl"]
+LlmGatewayUrl = os.environ["LlmGatewayUrl"] + "/api/v1"
 print(f'LlmGatewayUrl: {LlmGatewayUrl}')
 
 class ThreadSafeSessionState:

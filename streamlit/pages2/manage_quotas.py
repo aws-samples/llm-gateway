@@ -23,7 +23,7 @@ show_pages(
 )
 add_indentation()
 
-QuotaURL = os.environ["ApiGatewayURL"] + "quota"
+QuotaURL = os.environ["LlmGatewayUrl"] + "/quota"
 
 def process_access_token():
     headers = _get_websocket_headers()
@@ -99,17 +99,21 @@ def fetch_and_display_quota_config(username):
 def update_quota_config(username, new_frequency, new_limit):
     access_token = process_access_token()
     if access_token:
-        headers = {"Authorization": f"Bearer {access_token}"}
+        headers_post = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }        
         body = {new_frequency: new_limit}
         params = {"username": username}
         
-        update_response = requests.post(QuotaURL, headers=headers, data=json.dumps(body), params=params, timeout=60)
+        update_response = requests.post(QuotaURL, headers=headers_post, json=body, params=params, timeout=60)
         if update_response.status_code == 200:
             st.success('Quota config updated successfully.')
             fetch_and_display_quota_config(username)
             st.experimental_rerun()
         else:
-            st.error('Failed to update Model Access Config: HTTP status code ' + str(update_response.status_code))
+            st.error('Failed to update Quota: HTTP status code ' + str(update_response.status_code))
 
 def delete_quota_config(username):
     access_token = process_access_token()

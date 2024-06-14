@@ -3,6 +3,7 @@ import json
 import logging
 import os
 from boto3.dynamodb.conditions import Key
+from common.auth import auth_handler
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -28,11 +29,6 @@ def get_default_model_access():
     parameter_value = response['Parameter']['Value']
     default_model_access_config_dict = json.loads(parameter_value)
     return default_model_access_config_dict
-
-def get_user_name(event):
-    username = event['requestContext']['authorizer']['username']
-    print(f'username: {username}')
-    return username
 
 def get_user_model_access_map(table, username, response):
     print(f'getting custom quota config for user {username}')
@@ -68,8 +64,14 @@ def lambda_handler(event, context):
              result of handling the event.
     """
     http_method = event.get('httpMethod')
+    path = event['path']
+    print(f'http_method: {http_method}. path: {path}')
+
+    caller_username, error_response = auth_handler(event, path)
+    if error_response:
+        return error_response
+
     table = boto3.resource("dynamodb").Table(MODEL_ACCESS_TABLE_NAME)
-    headers = event["headers"]
 
     query_params = event.get('queryStringParameters') or {}  # Use an empty dict as a default
     username = query_params.get('username', None)
@@ -100,8 +102,7 @@ def lambda_handler(event, context):
             response['body'] = json.dumps(body)
             print(f"response['body']: {response['body']}")
     elif http_method == 'GET' and path == "/modelaccess/currentuser":
-        username = get_user_name(event)
-        error = get_user_model_access_map(table, username, response)
+        error = get_user_model_access_map(table, caller_username, response)
         if error:
             return error
         if response['body'] == "{}":
