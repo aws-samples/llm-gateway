@@ -7,6 +7,8 @@ AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
 
 PYTHON_SCRIPT="generate_salt.py"
 
+npm install
+
 # Check if the salt file exists
 if [ ! -f salt.txt ]; then
     # Run the Python script to generate the salt file

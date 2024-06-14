@@ -1,3 +1,4 @@
+import time
 import uuid
 from abc import ABC, abstractmethod
 from typing import AsyncIterable
@@ -19,13 +20,21 @@ class BaseChatModel(ABC):
     Currently, only Bedrock model is supported, but may be used for SageMaker models if needed.
     """
 
+    def list_models(self) -> list[str]:
+        """Return a list of supported models"""
+        return []
+
+    def validate(self, chat_request: ChatRequest):
+        """Validate chat completion requests."""
+        pass
+
     @abstractmethod
     def chat(self, chat_request: ChatRequest) -> ChatResponse:
         """Handle a basic chat completion requests."""
         pass
 
     @abstractmethod
-    def chat_stream(self, chat_request: ChatRequest) -> AsyncIterable[bytes]:
+    def chat_stream(self, chat_request: ChatRequest, user_name, api_key_name) -> AsyncIterable[bytes]:
         """Handle a basic chat completion requests with stream response."""
         pass
 
@@ -38,7 +47,11 @@ class BaseChatModel(ABC):
             response: ChatStreamResponse | None = None
     ) -> bytes:
         if response:
-            return "data: {}\n\n".format(response.model_dump_json()).encode("utf-8")
+            # to populate other fields when using exclude_unset=True
+            response.system_fingerprint = "fp"
+            response.object = "chat.completion.chunk"
+            response.created = int(time.time())
+            return "data: {}\n\n".format(response.model_dump_json(exclude_unset=True)).encode("utf-8")
         return "data: [DONE]\n\n".encode("utf-8")
 
 
