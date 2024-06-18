@@ -167,6 +167,13 @@ This is the page where you can see how close a user is to exceeding their quota.
 
 ![Check Quota Status](./media/Check_Quota_Status.png)
 
+## Adding a new Bedrock Model
+
+To add a new Bedrock Model to the LLM Gateway API, you must do the following:
+
+1. Add it to the list of supported models in `lambdas/gateway/api/models/bedrock.py`, in the `_supported_models` variable
+2. Add the new model's pricing information to the pricing config in `lambdas/gateway/api/data/cost_db.csv`
+
 ## Security
 See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
 
