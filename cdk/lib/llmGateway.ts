@@ -56,6 +56,7 @@ export class LlmGatewayStack extends cdk.Stack {
   defaultModelAccess = this.node.tryGetContext("defaultModelAccess");
   modelAccessRepoName = this.node.tryGetContext("modelAccessRepoName");
   debug = this.node.tryGetContext("debug");
+  enabledModels = this.node.tryGetContext("enabledModels");
 
   apiKeyValueHashIndex = "ApiKeyValueHashIndex";
   apiKeyTableName = "ApiKeyTable";
@@ -655,7 +656,8 @@ export class LlmGatewayStack extends cdk.Stack {
       DEFAULT_QUOTA_PARAMETER_NAME: defaultQuotaParameter.parameterName,
       DEFAULT_MODEL_ACCESS_PARAMETER_NAME: defaultModelAccessParameter.parameterName,
       REQUEST_DETAILS_TABLE_NAME: requestDetailsTable.tableName,
-      DEBUG: this.debug
+      DEBUG: this.debug,
+      ENABLED_MODELS: this.enabledModels
     }
 
     // Create a Security Group for the private ALB that only allows traffic from within the VPC
@@ -1223,7 +1225,8 @@ export class LlmGatewayStack extends cdk.Stack {
         AdminList: this.adminList,
         Region: this.regionValue,
         CognitoDomainPrefix: this.cognitoDomainPrefix,
-        CognitoClientId: this.applicationLoadBalanceruserPoolClient.userPoolClientId
+        CognitoClientId: this.applicationLoadBalanceruserPoolClient.userPoolClientId,
+        ENABLED_MODELS: this.enabledModels
       },
       healthCheck: {
         command: ['CMD-SHELL', 'curl -f http://localhost:8501/healthz || exit 1'],

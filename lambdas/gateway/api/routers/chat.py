@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Body
+from fastapi import APIRouter, Depends, Body, HTTPException
 from fastapi.responses import StreamingResponse
 
 from api.auth import api_key_auth, get_api_key_name
@@ -10,6 +10,7 @@ from api.setting import DEFAULT_MODEL
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from api.quota import check_quota
 from api.model_access import check_model_access
+from api.model_enabled import get_model_region_map
 
 router = APIRouter(
     prefix="/chat",
@@ -19,6 +20,7 @@ router = APIRouter(
 
 security = HTTPBearer()
 
+model_region_map = get_model_region_map()
 
 @router.post("/completions", response_model=ChatResponse | ChatStreamResponse, response_model_exclude_unset=True)
 async def chat_completions(
@@ -42,6 +44,9 @@ async def chat_completions(
     api_key_name = None
     if credentials.credentials.startswith("sk-"):
         api_key_name = get_api_key_name(credentials.credentials)
+
+    if chat_request.model not in model_region_map:
+        raise HTTPException(status_code=400, detail=str("Selected model is not enabled"))
 
     check_model_access(user_name, api_key_name, chat_request.model)
     check_quota(user_name, api_key_name, chat_request.model)
