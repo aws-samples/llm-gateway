@@ -84,6 +84,7 @@ echo $ECR_QUOTA_REPOSITORY
 echo $ADMIN_LIST
 echo $DEFAULT_MODEL_ACCESS
 echo $ECR_MODEL_ACCESS_REPOSITORY
+echo $ENABLED_MODELS
 cd ../streamlit
 ./build_and_deploy.sh $ECR_STREAMLIT_REPOSITORY
 
@@ -115,6 +116,7 @@ cdk deploy "$STACK_NAME" \
 --context salt=$SALT \
 --context defaultModelAccess=$DEFAULT_MODEL_ACCESS \
 --context modelAccessRepoName=$ECR_MODEL_ACCESS_REPOSITORY \
+--context enabledModels=$ENABLED_MODELS \
 --context debug=$DEBUG \
 --outputs-file ./outputs.json
 

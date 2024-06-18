@@ -23,11 +23,7 @@ show_pages(
 )
 add_indentation()
 
-ModelAccessURL = os.environ["LlmGatewayUrl"] + "/modelaccess"
-region = os.environ["Region"]
-
-#map for us-east-1, us-west-2, ap-south-1, 
-model_map_1 = {
+model_map_all_models = {
             "anthropic.claude-3-haiku-20240307-v1:0": "Claude 3 Haiku",
             "anthropic.claude-3-sonnet-20240229-v1:0": "Claude 3 Sonnet",
             "meta.llama3-70b-instruct-v1:0": "Llama 3",
@@ -37,36 +33,21 @@ model_map_1 = {
             "cohere.embed-english-v3":"Cohere Embed English"
         }
 
-#map for ap-southeast-2, eu-west-1, eu-west-3
-model_map_2 = {
-            "anthropic.claude-3-haiku-20240307-v1:0": "Claude 3 Haiku",
-            "anthropic.claude-3-sonnet-20240229-v1:0": "Claude 3 Sonnet",
-            "amazon.titan-text-express-v1": "Amazon Titan",
-            "mistral.mixtral-8x7b-instruct-v0:1": "Mixtral 8x7B",
-            "cohere.embed-multilingual-v3":"Cohere Embed Multilingual",
-            "cohere.embed-english-v3":"Cohere Embed English"
-        }
+ModelAccessURL = os.environ["LlmGatewayUrl"] + "/modelaccess"
+region = os.environ["Region"]
 
-#map for eu-central-1
-model_map_3 = {
-            "anthropic.claude-3-haiku-20240307-v1:0": "Claude 3 Haiku",
-            "anthropic.claude-3-sonnet-20240229-v1:0": "Claude 3 Sonnet",
-            "amazon.titan-text-express-v1": "Amazon Titan",
-            "cohere.embed-multilingual-v3":"Cohere Embed Multilingual",
-            "cohere.embed-english-v3":"Cohere Embed English"
-        }
+chosen_model_map = {}
 
-region_model_map = {
-    "us-east-1": model_map_1,
-    "us-west-2": model_map_1,
-    "ap-south-1": model_map_1,
-    "ap-southeast-2": model_map_2,
-    "eu-west-1": model_map_2,
-    "eu-west-3": model_map_2,
-    "eu-central-1": model_map_3
-}
-
-chosen_model_map = region_model_map[region]
+ENABLED_MODELS = os.environ["ENABLED_MODELS"]
+enabled_models_list = ENABLED_MODELS.split(",")
+for enabled_model in enabled_models_list:
+    enabled_model_split = enabled_model.split("_")
+    if len(enabled_model_split) == 1:
+        model = enabled_model_split[0]
+    else:
+        model = enabled_model_split[1]
+    if model in model_map_all_models:
+        chosen_model_map[model] = model_map_all_models[model]
 
 def process_access_token():
     headers = _get_websocket_headers()

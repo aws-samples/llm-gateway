@@ -3,10 +3,12 @@ import json
 import logging
 import re
 import time
+import os
 from abc import ABC
 from typing import AsyncIterable, Iterable, Literal
 
 import boto3
+from api.model_enabled import get_region_client_map, get_model_region_map
 import numpy as np
 import requests
 import tiktoken
@@ -42,10 +44,8 @@ from api.request_details import create_request_detail
 
 logger = logging.getLogger(__name__)
 
-bedrock_runtime = boto3.client(
-    service_name="bedrock-runtime",
-    region_name=AWS_REGION,
-)
+region_client_map = get_region_client_map()
+model_region_map = get_model_region_map()
 
 SUPPORTED_BEDROCK_EMBEDDING_MODELS = {
     "cohere.embed-multilingual-v3": "Cohere Embed Multilingual",
@@ -194,7 +194,7 @@ class BedrockModel(BaseChatModel):
 
     def _invoke_bedrock(self, chat_request: ChatRequest, stream=False):
         """Common logic for invoke bedrock models"""
-
+        bedrock_runtime = region_client_map[model_region_map[chat_request.model]]
         # convert OpenAI chat request to Bedrock SDK request
         args = self._parse_request(chat_request)
 
@@ -664,6 +664,8 @@ class BedrockEmbeddingsModel(BaseEmbeddingsModel, ABC):
     content_type = "application/json"
 
     def _invoke_model(self, args: dict, model_id: str):
+        bedrock_runtime = region_client_map[model_region_map[model_id]]
+
         body = json.dumps(args)
         if DEBUG:
             logger.info("Invoke Bedrock Model: " + model_id)
