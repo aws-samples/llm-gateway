@@ -1,12 +1,11 @@
-FROM public.ecr.aws/lambda/python:3.12@sha256:c54348db9f790f6206b8d2208ae6950f6957e0aa3df14aa6f2975f2d63a4a2a9
+FROM python:3.12-slim
 
-COPY ./api ./api
+WORKDIR /app
 
-COPY requirements.txt .
+COPY ./requirements.txt /app/requirements.txt
 
-RUN pip3 install -r requirements.txt -U --no-cache-dir
+RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt
 
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD python -c "import sys; sys.exit(0)" || exit 1
+COPY ./api /app/api
 
-CMD [ "api.app.handler" ]
+CMD ["uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "80"]
