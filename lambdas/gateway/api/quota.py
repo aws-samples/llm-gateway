@@ -21,7 +21,7 @@ quota_table = dynamodb.Table(QUOTA_TABLE_NAME)
 
 cache = TTLCache(maxsize=5000, ttl=60)
 
-cost_df = pd.read_csv('/app/api/data/cost_db.csv', dtype={'cost_per_token': float})
+cost_df = pd.read_csv('/app/api/data/cost_db.csv', dtype={'cost_per_token_input': float, 'cost_per_token_output': float})
 print(f'cost_df: {cost_df}')
 
 def check_quota(user_name, api_key_name, model_id):
@@ -202,21 +202,20 @@ def get_default_quota():
     return default_quota_config_dict
 
 def calculate_input_cost(prompt_tokens, model):
-    return calculate_cost(prompt_tokens, model, 'input')
+    return calculate_cost(prompt_tokens, model, 'cost_per_token_input')
 
 def calculate_output_cost(completion_tokens, model):
-    return calculate_cost(completion_tokens, model, 'output')
+    return calculate_cost(completion_tokens, model, 'cost_per_token_output')
 
 def calculate_cost(num_tokens, model, cost_type):
     print(f'cost_df: {cost_df}')
     print(f'model: {model} region: {REGION} type: {cost_type}')
     filtered_df = cost_df[
         (cost_df['model_name'] == model) & 
-        ((cost_df['region'] == REGION) | (cost_df['region'].isna())) & 
-        (cost_df['type'] == cost_type)
+        ((cost_df['region'] == REGION) | (cost_df['region'].isna()))
     ]
     print(f'filtered_df: {filtered_df}')
-    costs_per_token = filtered_df.iloc[0]['cost_per_token']
+    costs_per_token = filtered_df.iloc[0][cost_type]
     return (num_tokens * costs_per_token) / 1000
 
 def update_quota(user_name, total_cost):

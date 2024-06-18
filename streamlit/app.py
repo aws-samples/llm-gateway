@@ -156,15 +156,21 @@ def estimate_cost(
 
     key = ",".join([model, region, type_])
 
+    cost_key = ""
+    if type_ == "input":
+        cost_key = "cost_per_token_input"
+    elif type_ == "output":
+        cost_key = "cost_per_token_output"
+
+
     if use_cache:  # Skip the DDB step for better cost / time performance
         with open(COST_DB, encoding="utf-8") as f:
             reader = csv.DictReader(f)
             costs_dict = {}
             for row in reader:
                 model_name = row["model_name"]
-                type_ = row["type"]
                 region = row["region"]
-                cost = float(row["cost_per_token"])
+                cost = float(row[cost_key])
 
                 costs_dict[",".join([model_name,region,type_])] = cost
 

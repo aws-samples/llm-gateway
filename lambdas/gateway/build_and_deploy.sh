@@ -9,9 +9,9 @@ APP_NAME=$1
 SERVERLESS_API=$2
 # Convert SERVERLESS_API to lowercase using tr and check if it is "true"
 if [ "$(echo "$SERVERLESS_API" | tr '[:upper:]' '[:lower:]')" = "true" ]; then
-  DOCKERFILE=Dockerfile
+  DOCKERFILE=Dockerfile_lambda
 else
-  DOCKERFILE=Dockerfile_ecs
+  DOCKERFILE=Dockerfile
 fi
 
 AWS_REGION=$(aws configure get region)

@@ -253,7 +253,7 @@ class BedrockModel(BaseChatModel):
                 input_cost = calculate_input_cost(usage.prompt_tokens, chat_request.model)
                 print(f'usage.prompt_tokens: {usage.prompt_tokens} input_cost: {input_cost}')
                 output_cost = calculate_output_cost(usage.completion_tokens, chat_request.model)
-                print(f'usage.completion_tokens: {usage.completion_tokens} input_cost: {output_cost}')
+                print(f'usage.completion_tokens: {usage.completion_tokens} output_cost: {output_cost}')
                 total_cost = input_cost + output_cost
                 print(f'total_cost: {total_cost}')
                 update_quota(user_name, total_cost)
