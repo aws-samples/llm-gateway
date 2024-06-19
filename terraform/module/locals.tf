@@ -51,11 +51,11 @@ locals {
 
   admin_list = var.adminList
 
-  llm_gateway_uri  = data.aws_ecr_repository.llm_gateway_ecr_repo.repository_url
-  quota_uri        = data.aws_ecr_repository.quota_ecr_repo.repository_url
-  apikey_uri       = data.aws_ecr_repository.api_key_ecr_repo
-  model_access_uri = data.aws_ecr_repository.model_access_ecr_repo.repository_url
-  streamlit_uri    = data.aws_ecr_repository.streamlit_ecr_repo.repository_url
+  llm_gateway_ecr_image_uri  = var.llm_gateway_ecr_image_uri
+  quota_image_ecr_image_uri        = var.quota_ecr_image_uri
+  api_key_ecr_image_uri       = var.api_key_ecr_image_uri
+  model_access_ecr_image_uri = var.model_access_ecr_image_uri
+  streamlit_ecr_image_uri    = var.streamlit_ecr_image_uri
 
   defaultTemp      = var.default_max_temp
   defaultMaxTokens = var.default_max_tokens
@@ -63,16 +63,18 @@ locals {
   default_quota = {
     "weekly" = "1.00"
   }
+
   default_model_access = {
     "model_access_list" : var.default_model_access
   }
+  enabled_models = var.enabled_models
 
   salt = var.salt
 
   loadbalancer = {
     listener_arn          = var.llm_gateway_loadbalancer_listener_arn
     alb_security_group_id = var.llm_gateway_loadbalancer_security_group_id
-    alb_dns_name          = var.llm_gateway_loadbalancer_dns_name
+    alb_dns_name          = var.api_domain_name
   }
 
   apikey = {

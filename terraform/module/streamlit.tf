@@ -87,7 +87,7 @@ module "streamlit" {
       cpu       = 1024
       memory    = 2048
       essential = true
-      image     = local.streamlit_uri
+      image     = local.streamlit_ecr_image_uri
       port_mappings = [
         {
           name          = local.streamlit_ui.container_name
@@ -116,6 +116,10 @@ module "streamlit" {
         {
           name  = "AdminList"
           value = local.admin_list
+        },
+        {
+          name  = "ENABLED_MODELS"
+          value = local.enabled_models
         }
       ],
 

@@ -55,7 +55,7 @@ resource "aws_cognito_user_pool_client" "llm_gateway_rest_user_pool_client" {
   callback_urls                        = local.callback_urls
   allowed_oauth_flows_user_pool_client = true
   allowed_oauth_flows                  = ["code"]
-  supported_identity_providers         = ["COGNITO", lookup(element(var.identity_providers, 0), "provider_name")]
+  supported_identity_providers         = ["COGNITO", length(var.identity_providers) > 0 ? lookup(element(var.identity_providers, 0), "provider_name") : "COGNITO"]
 
   token_validity_units {
     access_token  = "hours"
@@ -68,7 +68,7 @@ resource "aws_cognito_user_pool_client" "llm_gateway_rest_user_pool_client" {
   id_token_validity      = 1
 
   allowed_oauth_scopes = ["openid", "email"]
-
+  depends_on =  [aws_cognito_identity_provider.llm_gateway_rest_identity_provider]
 }
 
 

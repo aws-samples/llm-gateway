@@ -1,5 +1,5 @@
 module "llm_gateway" {
-  source = "./llm-gateway"
+  source = "../module"
   name   = var.name
   region = var.region
 
@@ -14,11 +14,11 @@ module "llm_gateway" {
   kms_key_arn = local.kms_key_arn == null ? module.llm_gateway_rest_kms[0].key_arn : local.kms_key_arn
 
   # ECR Repository related Local variables
-  api_key_ecr_repo      = var.api_key_ecr_repo
-  streamlit_ecr_repo    = var.streamlit_ecr_repo
-  quota_ecr_repo        = var.quota_ecr_repo
-  model_access_ecr_repo = var.model_access_ecr_repo
-  llm_gateway_ecr_repo  = var.llm_gateway_ecr_repo
+  api_key_ecr_image_uri      = var.api_key_ecr_image_uri
+  streamlit_ecr_image_uri    = var.streamlit_ecr_image_uri
+  quota_ecr_image_uri        = var.quota_ecr_image_uri
+  model_access_ecr_image_uri = var.model_access_ecr_image_uri
+  llm_gateway_ecr_image_uri  = var.llm_gateway_ecr_image_uri
 
 
   # Cognito related Local variables
@@ -32,15 +32,14 @@ module "llm_gateway" {
 
   adminList            = var.adminList
   default_model_access = var.default_model_access
+  enabled_models = var.enabled_models
   salt                 = var.salt
-  api_domain_name      = var.domain_name
-  ui_domain_name       = var.domain_name
+  api_domain_name      = var.api_domain_name
+  ui_domain_name       = var.ui_domain_name
 
   # LLM Gateway Load balancer
 
-  llm_gateway_loadbalancer_security_group_id = module.llmgateway_alb.security_group_id
-  llm_gateway_loadbalancer_dns_name          = module.llmgateway_alb.dns_name
-  llm_gateway_loadbalancer_listener_arn      = module.llmgateway_alb.listeners["https"].arn
-
+  llm_gateway_loadbalancer_security_group_id = module.llm_gateway_alb.security_group_id
+  llm_gateway_loadbalancer_listener_arn      = module.llm_gateway_alb.listeners["https"].arn
 
 }

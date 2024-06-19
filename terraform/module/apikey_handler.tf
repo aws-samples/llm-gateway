@@ -1,9 +1,9 @@
-resource "aws_security_group" "llm_gateway_rest_modelaccess_lambda_function_security_group" {
-  name        = "${local.name}-model-access-authorizer-security-group"
+resource "aws_security_group" "llm_gateway_rest_apikey_lambda_function_security_group" {
   vpc_id      = local.vpc_id
-  description = "security group"
+  description = "Security group for api key handler"
+
   egress {
-    description = "allow 443 to internet"
+    description = "Allow internet using https"
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
@@ -11,8 +11,7 @@ resource "aws_security_group" "llm_gateway_rest_modelaccess_lambda_function_secu
   }
 }
 
-
-module "llm_gateway_rest_model_access_handler" {
+module "llm_gateway_rest_apikey_handler" {
 
   source  = "terraform-aws-modules/lambda/aws"
   version = "7.5.0"
@@ -20,29 +19,27 @@ module "llm_gateway_rest_model_access_handler" {
   create_layer   = false
   create_package = false
 
-  function_name = join("", [local.name, "-model-access-handler"])
+  function_name = join("", [local.name, "-apikey-handler"])
   architectures = [local.architectures]
 
   vpc_subnet_ids                     = local.private_subnet_ids
-  vpc_security_group_ids             = [aws_security_group.llm_gateway_rest_modelaccess_lambda_function_security_group.id]
+  vpc_security_group_ids             = [aws_security_group.llm_gateway_rest_apikey_lambda_function_security_group.id]
   attach_network_policy              = true
   replace_security_groups_on_destroy = true
   replacement_security_group_ids     = [local.vpc_replacement_security_group_ids]
 
   environment_variables = {
+    API_KEY_TABLE_NAME : aws_dynamodb_table.llm_gateway_rest_apikey.name,
+    COGNITO_DOMAIN_PREFIX : local.cognito_domain_prefix,
     REGION : local.region,
-    MODEL_ACCESS_TABLE_NAME : aws_dynamodb_table.llm_gateway_rest_model_access.name,
-    API_KEY_TABLE_NAME : aws_dynamodb_table.llm_gateway_rest_apikey.name
-    DEFAULT_MODEL_ACCESS_PARAMETER_NAME : aws_ssm_parameter.llm_gateway_rest_ssm_parameter_default_model_list.name,
-    COGNITO_DOMAIN_PREFIX : local.cognito_domain_prefix
+    SALT_SECRET : aws_secretsmanager_secret.llm_gateway_rest_secret_salt.name
     NON_ADMIN_ENDPOINTS : local.non_admin_endpoints,
     API_KEY_EXCLUDED_ENDPOINTS : local.api_key_excluded_endpoints,
     USER_POOL_ID : local.user_pool_id,
     APP_CLIENT_ID : local.user_pool_app_client_id,
     ADMIN_LIST : local.admin_list,
-    SALT_SECRET : aws_secretsmanager_secret.llm_gateway_rest_secret_salt.name
-
   }
+
 
   publish = true
   timeout = 900
@@ -50,12 +47,18 @@ module "llm_gateway_rest_model_access_handler" {
   allowed_triggers = {
     "ALB" = {
       service    = "elasticloadbalancing"
-      source_arn = aws_alb_target_group.llm_gateway_rest_model_access_handler_target_group.arn
+      source_arn = aws_alb_target_group.llm_gateway_rest_apikey_handler_target_group.arn
     }
   }
 
   attach_policy_statements = true
   policy_statements = {
+
+    #    api_gateway = {
+    #      effect  = "Allow",
+    #      actions = ["execute-api:Invoke", "execute-api:ManageConnections"],
+    #      "resources" : ["arn:aws:execute-api:${local.region}:${local.account}:${aws_api_gateway_rest_api.llm_gateway_rest_api.id}/*"],
+    #    }
 
     kms_decrypt = {
       effect = "Allow",
@@ -81,23 +84,10 @@ module "llm_gateway_rest_model_access_handler" {
         "dynamodb:UpdateItem"
       ],
       "resources" : [
-        aws_dynamodb_table.llm_gateway_rest_model_access.arn,
         aws_dynamodb_table.llm_gateway_rest_apikey.arn,
         "${aws_dynamodb_table.llm_gateway_rest_apikey.arn}/index/*"
       ],
     }
-
-    ssm = {
-      effect = "Allow",
-      actions = [
-        "ssm:GetParameter"
-      ],
-      resources = [
-        aws_ssm_parameter.llm_gateway_rest_ssm_parameter_default_quota.arn,
-        aws_ssm_parameter.llm_gateway_rest_ssm_parameter_default_model_list.arn,
-      ]
-    }
-
     secrets_manager = {
       effect = "Allow",
       actions = [
@@ -118,25 +108,25 @@ module "llm_gateway_rest_model_access_handler" {
     }
 
   }
-  package_type               = "Image"
-  image_uri                  = "${data.aws_ecr_repository.model_access_ecr_repo.repository_url}:latest"
+  package_type = "Image"
+  image_uri    = local.api_key_ecr_image_uri
+
   cloudwatch_logs_kms_key_id = local.kms_key_arn
   tags                       = local.tags
 }
 
-resource "aws_alb_target_group" "llm_gateway_rest_model_access_handler_target_group" {
-  name_prefix = local.model-access.prefix
-
+resource "aws_alb_target_group" "llm_gateway_rest_apikey_handler_target_group" {
+  name_prefix = local.apikey.prefix
   vpc_id      = local.vpc_id
   target_type = "lambda"
 }
 
-resource "aws_alb_listener_rule" "llm_gateway_rest_model_access_handler_rule" {
+resource "aws_alb_listener_rule" "llm_gateway_rest_apikey_handler_rule" {
   listener_arn = local.loadbalancer.listener_arn
-  priority     = local.model-access.priority
+  priority     = local.apikey.priority
   action {
     type             = "forward"
-    target_group_arn = aws_alb_target_group.llm_gateway_rest_model_access_handler_target_group.arn
+    target_group_arn = aws_alb_target_group.llm_gateway_rest_apikey_handler_target_group.arn
   }
 
   condition {
@@ -147,15 +137,13 @@ resource "aws_alb_listener_rule" "llm_gateway_rest_model_access_handler_rule" {
 
   condition {
     path_pattern {
-      values = [local.model-access.path]
+      values = [local.apikey.path]
     }
   }
 
 }
 
-resource "aws_lb_target_group_attachment" "llm_gateway_rest_model_access_handler_target_group_attachment" {
-  target_group_arn = aws_alb_target_group.llm_gateway_rest_model_access_handler_target_group.arn
-  target_id        = module.llm_gateway_rest_model_access_handler.lambda_function_arn
+resource "aws_alb_target_group_attachment" "llm_gateway_rest_apikey_handler_target_group_attachment" {
+  target_group_arn = aws_alb_target_group.llm_gateway_rest_apikey_handler_target_group.arn
+  target_id        = module.llm_gateway_rest_apikey_handler.lambda_function_arn
 }
-
-
