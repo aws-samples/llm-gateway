@@ -9,12 +9,13 @@ locals {
   vpc_cidr                     = var.vpc_cidr
   azs                          = slice(data.aws_availability_zones.available.names, 0, 2)
   kms_key_arn                  = var.kms_key_arn
-  private_gateway_loadbalancer = var.private_llm_gateway_loadbalancer
+  private_gateway_loadbalancer = var.is_private_llm_gateway_loadbalancer
   architectures                = var.architectures
 
-  domain_name           = var.domain_name
   cognito_domain_prefix = var.cognito_domain_prefix
-  ui_domain             = "https://${local.domain_name}"
+
+  ui_domain_name           = var.ui_domain_name
+  ui_domain             = "https://${local.ui_domain_name}"
   callback_urls = [
     "${local.ui_domain}",
     "${local.ui_domain}/oauth2/idpresponse"

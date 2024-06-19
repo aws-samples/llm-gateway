@@ -83,7 +83,7 @@ module "ecs" {
       cpu       = 512
       memory    = 1024
       essential = true
-      image     = local.llm_gateway_uri
+      image     = local.llm_gateway_ecr_image_uri
       runtime_platform = {
         operating_system_family = "LINUX"
         cpu_architecture        = upper(local.architectures)
@@ -162,6 +162,10 @@ module "ecs" {
 
           name  = "DEBUG"
           value = local.debug
+        },
+        {
+          name  = "ENABLED_MODELS"
+          value = local.enabled_models
         }
       ]
       port_mappings = [
