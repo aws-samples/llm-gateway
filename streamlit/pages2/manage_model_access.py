@@ -95,10 +95,11 @@ else:
 def build_human_readable_model_list(model_access_list):
     human_string = ""
     for model in model_access_list.split(","):
-        if human_string == "":
-            human_string += chosen_model_map[model]
-        else:
-            human_string += ", " + chosen_model_map[model]
+        if model in chosen_model_map:
+            if human_string == "":
+                human_string += chosen_model_map[model]
+            else:
+                human_string += ", " + chosen_model_map[model]
     print(f'human_string: {human_string}')
     return human_string
 
@@ -202,7 +203,8 @@ if 'model_access_config' in st.session_state and st.session_state.model_access_c
     col5.markdown("**Action**")
 
     col1.write(st.session_state.selected_username)
-    current_access_list = [chosen_model_map[model] for model in st.session_state.model_access_config["model_access_list"].split(",")]
+    current_access_list = [chosen_model_map[model] for model in st.session_state.model_access_config["model_access_list"].split(",")
+                           if model in chosen_model_map]
     new_access_list = col2.multiselect("Edit Access List", list(chosen_model_map.values()), default=current_access_list)
     col3.write("Default" if st.session_state.model_access_config['default'].lower() == "true" else "Custom")
 

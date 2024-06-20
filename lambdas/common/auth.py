@@ -259,7 +259,7 @@ def auth_handler(event, current_method):
         elif current_method in NON_ADMIN_ENDPOINTS:
             logger.info(f"Access granted for user developer {user_name}")
             cache_authorized(bearer_token, current_method, user_name)
-            authorized_response(user_name)
+            return authorized_response(user_name)
         else:
             logger.info(f"Access denied for user developer {user_name}")
             cache_unauthorized(bearer_token, current_method)
