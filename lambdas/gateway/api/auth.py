@@ -7,6 +7,9 @@ import json
 import os
 import requests
 import hashlib
+import botocore
+from cachetools import TTLCache
+import traceback
 
 ## BEGIN ENVIORNMENT VARIABLES #################################################
 COGNITO_DOMAIN_PREFIX = os.environ.get("COGNITO_DOMAIN_PREFIX")
@@ -14,23 +17,72 @@ REGION = os.environ.get("REGION")
 API_KEY_TABLE_NAME = os.environ.get("API_KEY_TABLE_NAME", None)
 SALT_SECRET = os.environ.get("SALT_SECRET")
 
-security = HTTPBearer()
+cache = TTLCache(maxsize=10000, ttl=1200)
 
+authorized_cache_value = "authorized"
+unauthorized_cache_value = "unauthorized"
+
+security = HTTPBearer()
 secrets_manager_client = boto3.client("secretsmanager")
 
+def add_to_cache(key, value):
+    print(f'Adding key to cache: {key}')
+    cache[key] = value
+
+def get_from_cache(key):
+    print(f'searching for key in cache: {key}')
+    return cache.get(key, None)
+
+def unauthorized_response():
+    return (None, {
+                    "statusCode": 403,
+                    "body": json.dumps({"message": "Unauthorized"})
+    })
+
+def authorized_response(user_name):
+    return (user_name, None)
+
+def get_cached_authorization(token, current_method):
+    get_from_cache(token+current_method)
+
+def cache_authorized(token, current_method, user_name):
+    add_to_cache(token+current_method, authorized_cache_value + ":" + user_name)
+
+def cache_unauthorized(token, current_method):
+    add_to_cache(token+current_method, unauthorized_cache_value)
+
 def api_key_auth(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)]
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    current_method
 ):
+    print(f'current_method: {current_method}')
     bearer_token = credentials.credentials
+    cached_auth_response = get_cached_authorization(bearer_token, current_method)
+    if cached_auth_response:
+        print(f'using the cache')
+        if cached_auth_response.startswith(authorized_cache_value):
+            user_name = authorized_cache_value.split(":")[1]
+            return authorized_response(user_name)
+        elif cached_auth_response.startswith(unauthorized_cache_value):
+            return unauthorized_response()
+        else:
+            return unauthorized_response()
+
+    print(f'not using the cache')
     try:
         if bearer_token.startswith("sk-"):
             user_name = get_user_name_api_key(bearer_token)
         else:
             user_name = get_user_name(bearer_token)
-        print(f'Found user_name {user_name}. Access granted.')
-        return user_name
+        if not user_name:
+            cache_unauthorized(bearer_token, current_method)
+            return unauthorized_response()
+        #print(f'Found user_name {user_name}. Access granted.')
+        cache_authorized(bearer_token, current_method, user_name)
+        return authorized_response(user_name)
     except Exception as e:
         print(f'Error when trying to authenticate: {e}')
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API Key or JWT Cognito Access Token"
         )
@@ -66,8 +118,11 @@ def query_by_api_key_hash(api_key_hash):
     Returns:
         dict: A dictionary containing the username and api_key_name if found; otherwise, None.
     """
+    client_config = botocore.config.Config(
+            max_pool_connections=50,
+        )
     # Initialize a DynamoDB resource. Make sure AWS credentials and region are configured.
-    dynamodb = boto3.resource('dynamodb')
+    dynamodb = boto3.resource('dynamodb', config=client_config)
 
     # Access the DynamoDB table
     table = dynamodb.Table(API_KEY_TABLE_NAME)
@@ -91,9 +146,10 @@ def query_by_api_key_hash(api_key_hash):
     
 def get_user_name(authorization_header):
     user_info = get_user_info_cognito(authorization_header)
-    print(f'user_info: {user_info}')
-    user_name = user_info["preferred_username"] if 'preferred_username' in user_info else user_info["username"]
-    return user_name
+    if user_info:
+        user_name = user_info["preferred_username"] if 'preferred_username' in user_info else user_info.get("username")
+        return user_name
+    return None
 
 def hash_api_key(api_key_value):
     """
@@ -136,4 +192,5 @@ def get_user_info_cognito(authorization_header):
     if response.status_code == 200:
         return response.json()  # Returns the user info as a JSON object
     else:
-        raise Exception(f"Error validating cognito token: {response}")
+        print(f'response: {response}')
+        return None

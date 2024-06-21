@@ -215,7 +215,12 @@ class BedrockModel(BaseChatModel):
         """Default implementation for Chat API."""
 
         message_id = self.generate_message_id()
+
+        #start_time = time.time()  # Start time before the function call
         response = self._invoke_bedrock(chat_request)
+        #end_time = time.time()  # End time after the function call
+        #elapsed_time = (end_time - start_time) * 1000  # Calculate elapsed time in milliseconds
+        #print(f"Execution time: {elapsed_time:.2f} ms")  # Print elapsed time
 
         output_message = response["output"]["message"]
         input_tokens = response["usage"]["inputTokens"]
@@ -249,13 +254,13 @@ class BedrockModel(BaseChatModel):
             else:
                 
                 usage = stream_response.usage
-                print(f'stream_response.usage: {usage}')
+                #print(f'stream_response.usage: {usage}')
                 input_cost = calculate_input_cost(usage.prompt_tokens, chat_request.model)
-                print(f'usage.prompt_tokens: {usage.prompt_tokens} input_cost: {input_cost}')
+                #print(f'usage.prompt_tokens: {usage.prompt_tokens} input_cost: {input_cost}')
                 output_cost = calculate_output_cost(usage.completion_tokens, chat_request.model)
-                print(f'usage.completion_tokens: {usage.completion_tokens} output_cost: {output_cost}')
+                #print(f'usage.completion_tokens: {usage.completion_tokens} output_cost: {output_cost}')
                 total_cost = input_cost + output_cost
-                print(f'total_cost: {total_cost}')
+                #print(f'total_cost: {total_cost}')
                 update_quota(user_name, total_cost)
                 create_request_detail(user_name, api_key_name, total_cost, usage.prompt_tokens, usage.completion_tokens, chat_request.model, "Success")
                 # An empty choices for Usage as per OpenAI doc below:

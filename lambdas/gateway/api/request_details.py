@@ -34,4 +34,4 @@ def create_request_detail(username, api_key_name, estimated_cost, input_tokens, 
     dynamo_response = table.put_item(
             Item=item
     )
-    print("Item created successfully:", dynamo_response)
+    #print("Item created successfully:", dynamo_response)

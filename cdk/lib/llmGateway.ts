@@ -57,6 +57,8 @@ export class LlmGatewayStack extends cdk.Stack {
   modelAccessRepoName = this.node.tryGetContext("modelAccessRepoName");
   debug = this.node.tryGetContext("debug");
   enabledModels = this.node.tryGetContext("enabledModels");
+  benchmarkMode = String(this.node.tryGetContext("llmGatewayIsPublic")).toLowerCase() == "true";
+  benchmarkRepoName = this.node.tryGetContext("benchmarkRepoName");
 
   apiKeyValueHashIndex = "ApiKeyValueHashIndex";
   apiKeyTableName = "ApiKeyTable";
@@ -158,6 +160,8 @@ export class LlmGatewayStack extends cdk.Stack {
       encryptionKey: kmsKey,
       pointInTimeRecovery: true,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
+      readCapacity: 100,
+      writeCapacity:100
     });
     return table;
   }
@@ -183,6 +187,8 @@ export class LlmGatewayStack extends cdk.Stack {
       encryptionKey: kmsKey,
       pointInTimeRecovery: true,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
+      readCapacity: 100,
+      writeCapacity:100
     });
 
     if (secondaryIndexName && secondaryIndexPartitionKeyName) {
@@ -194,6 +200,8 @@ export class LlmGatewayStack extends cdk.Stack {
           type: dynamodb.AttributeType.STRING,
         },
         projectionType: dynamodb.ProjectionType.ALL, // Determines which attributes will be copied to the index
+        readCapacity: 400,
+        writeCapacity:25
       });
     }
 
@@ -529,7 +537,8 @@ export class LlmGatewayStack extends cdk.Stack {
     apiKeyEcr: ecr.IRepository,
     llmGatewayApiEcr: ecr.IRepository,
     quotaEcr: ecr.IRepository,
-    modelAccessEcr: ecr.IRepository
+    modelAccessEcr: ecr.IRepository,
+    benchmarkEcr: ecr.IRepository
   ) {
 
     const kmsKey = new kms.Key(this, "llmGatewayKmsKey", {
@@ -643,6 +652,8 @@ export class LlmGatewayStack extends cdk.Stack {
     // Create Lambda function from the ECR image.
     const vpcParams = this.configureVpcParams();
     let targetGroupLlmGateway :elbv2.ApplicationTargetGroup;
+    let targetGroupBenchmark :elbv2.ApplicationTargetGroup;
+    const LlmGatewayUrl = "https://" + this.llmGatewayDomainName
 
     const environment = {
       REGION: this.regionValue,
@@ -657,7 +668,9 @@ export class LlmGatewayStack extends cdk.Stack {
       DEFAULT_MODEL_ACCESS_PARAMETER_NAME: defaultModelAccessParameter.parameterName,
       REQUEST_DETAILS_TABLE_NAME: requestDetailsTable.tableName,
       DEBUG: this.debug,
-      ENABLED_MODELS: this.enabledModels
+      ENABLED_MODELS: this.enabledModels,
+      BENCHMARK_MODE: String(this.benchmarkMode),
+      LLM_GATEWAY_URL: LlmGatewayUrl
     }
 
     // Create a Security Group for the private ALB that only allows traffic from within the VPC
@@ -746,8 +759,8 @@ export class LlmGatewayStack extends cdk.Stack {
       ecsExecutionRole.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonECSTaskExecutionRolePolicy'));
 
       const taskDefinition = new ecs.FargateTaskDefinition(this, 'llmGatewayTaskDefinition', {
-        memoryLimitMiB: 2048,
-        cpu: 1024,
+        memoryLimitMiB: 4096,
+        cpu: 2048,
         executionRole: ecsExecutionRole,
         taskRole: ecsExecutionRole,
         runtimePlatform: {
@@ -773,7 +786,7 @@ export class LlmGatewayStack extends cdk.Stack {
         serviceName: llmGatewayEcsTask,
         cluster,
         taskDefinition,
-        desiredCount: 1,
+        desiredCount: 32,
         securityGroups: [llmGatewayAlbSecurityGroup],
         assignPublicIp: false,
         circuitBreaker: {
@@ -781,7 +794,6 @@ export class LlmGatewayStack extends cdk.Stack {
           rollback:true
         },
         healthCheckGracePeriod: cdk.Duration.seconds(60),
-
       });
 
       //Create a target group for the ECS task
@@ -832,6 +844,91 @@ export class LlmGatewayStack extends cdk.Stack {
       action: elbv2.ListenerAction.forward([targetGroupLlmGateway])
     });
 
+    if (this.benchmarkMode) {
+      const logGroup = new logs.LogGroup(this, 'benchmarkLogGroup', {
+        logGroupName: '/ecs/LlmGateway/benchmark',
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+        encryptionKey: kmsKey
+      });
+      const ecsBenchmarkExecutionRole = this.createLlmGatewayRole(
+        "benchmarkEcsRole",
+        quotaTable,
+        modelAccessTable,
+        requestDetailsTable,
+        apiKeyTable,
+        this.apiKeyValueHashIndex,
+        saltSecret,
+        defaultQuotaParameter,
+        defaultModelAccessParameter,
+        new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
+        kmsKey
+      )
+      ecsBenchmarkExecutionRole.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonECSTaskExecutionRolePolicy'));
+      const benchmarkTaskDefinition = new ecs.FargateTaskDefinition(this, 'benchmarkTaskDefinition', {
+        memoryLimitMiB: 2048,
+        cpu: 1024,
+        executionRole: ecsBenchmarkExecutionRole,
+        taskRole: ecsBenchmarkExecutionRole,
+        runtimePlatform: {
+          cpuArchitecture: this.architecture == "x86" ? ecs.CpuArchitecture.X86_64 : ecs.CpuArchitecture.ARM64,
+          operatingSystemFamily: ecs.OperatingSystemFamily.LINUX
+        },
+      });
+
+      const benchmarkContainer = benchmarkTaskDefinition.addContainer('benchmark', {
+        image: ecs.ContainerImage.fromEcrRepository(benchmarkEcr, "latest"),
+        logging: ecs.LogDrivers.awsLogs({ logGroup, streamPrefix: 'benchmark' }),
+        environment: environment,
+      });
+
+      benchmarkContainer.addPortMappings({
+        containerPort: 8080,
+        hostPort: 8080,
+        protocol: ecs.Protocol.TCP
+      });
+
+      const benchmarkTask = "benchmark"
+      const benchmarkService = new ecs.FargateService(this, 'BenchmarkApiService', {
+        serviceName: benchmarkTask,
+        cluster,
+        taskDefinition:benchmarkTaskDefinition,
+        desiredCount: 1,
+        securityGroups: [llmGatewayAlbSecurityGroup],
+        assignPublicIp: false,
+        circuitBreaker: {
+          enable:true,
+          rollback:true
+        },
+        healthCheckGracePeriod: cdk.Duration.seconds(60),
+      });
+
+      const type = this.llmGatewayIsPublic ? "Public" : "Private"
+      targetGroupBenchmark = new elbv2.ApplicationTargetGroup(this, 'benchmarkEcsTargetGroup' + type, {
+        vpc,
+        targetGroupName: 'benchmarkEcsTargetGroup' + type,
+        protocol: elbv2.ApplicationProtocol.HTTP,
+        targetType: elbv2.TargetType.IP,
+        port: 80,
+        targets: [benchmarkService],
+        healthCheck: {
+          enabled: true,
+          path: "/benchmark/health"
+        }
+      });
+
+      //Create a target group for the ECS task
+      llmGatewayAppListener.addAction('ForwardToBenchmarkAction', {
+        priority: 60,
+        conditions: [elbv2.ListenerCondition.hostHeaders([this.llmGatewayDomainName]), elbv2.ListenerCondition.pathPatterns(['/benchmark*'])],
+        action: elbv2.ListenerAction.forward([targetGroupBenchmark])
+      });
+
+      new cdk.CfnOutput(this, 'BenchmarkEcsTask', {
+        value: benchmarkTask,
+        description: 'Name of the benchmark ecs task'
+      });
+    }
+
     const llmGatewayAppListener80 = llmGatewayAlb.addListener('LlmGatewayAppListener80', {
       port: 80,
       protocol: elbv2.ApplicationProtocol.HTTP,
@@ -864,7 +961,6 @@ export class LlmGatewayStack extends cdk.Stack {
       })
     });
 
-    const LlmGatewayUrl = "https://" + this.llmGatewayDomainName
     new cdk.CfnOutput(this, 'LlmGatewayUrl', {
       value: LlmGatewayUrl,
       description: 'The url of the llmgateway private application load balancer'
@@ -1012,6 +1108,7 @@ export class LlmGatewayStack extends cdk.Stack {
         USER_POOL_ID: this.userPool.userPoolId,
         APP_CLIENT_ID: this.applicationLoadBalanceruserPoolClient.userPoolClientId,
         ADMIN_LIST: this.adminList,
+        BENCHMARK_MODE: String(this.benchmarkMode)
       },
       timeout: cdk.Duration.minutes(15),
       memorySize: 512,
@@ -1117,6 +1214,11 @@ export class LlmGatewayStack extends cdk.Stack {
           userPoolClientName: 'ApplicationLoadBalancerClient',
           userPool: this.userPool,
           generateSecret: true,
+          authFlows: {
+            userPassword: true,
+            custom: true,
+            userSrp: true
+          },
           oAuth: {
             callbackUrls: [`https://${this.uiDomainName}/oauth2/idpresponse`, `https://${this.uiDomainName}/`],
             flows: {
@@ -1347,6 +1449,12 @@ export class LlmGatewayStack extends cdk.Stack {
       this.modelAccessRepoName!
     );
 
-    this.createAlbApi(apiKeyEcrRepo, llmGatewayEcrRepo, quotaEcrRepo, modelAccessEcrRepo)
+    const benchmarkEcrRepo = ecr.Repository.fromRepositoryName(
+      this,
+      this.benchmarkRepoName!,
+      this.benchmarkRepoName!
+    );
+
+    this.createAlbApi(apiKeyEcrRepo, llmGatewayEcrRepo, quotaEcrRepo, modelAccessEcrRepo, benchmarkEcrRepo)
   }
 }

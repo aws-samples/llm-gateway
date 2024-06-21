@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Body, HTTPException
+from fastapi import APIRouter, Depends, Body, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 
 from api.auth import api_key_auth, get_api_key_name
@@ -23,7 +23,8 @@ security = HTTPBearer()
 model_region_map = get_model_region_map()
 
 @router.post("/completions", response_model=ChatResponse | ChatStreamResponse, response_model_exclude_unset=True)
-async def chat_completions(
+def chat_completions(
+        request: Request,
         chat_request: Annotated[
             ChatRequest,
             Body(
@@ -40,7 +41,13 @@ async def chat_completions(
         ],
         credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)]
 ):
-    user_name = api_key_auth(credentials)
+    current_path = request.url.path
+    user_name, error_response =  api_key_auth(credentials, current_path)
+    if error_response:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API Key or JWT Cognito Access Token"
+        )
+
     api_key_name = None
     if credentials.credentials.startswith("sk-"):
         api_key_name = get_api_key_name(credentials.credentials)
@@ -61,4 +68,7 @@ async def chat_completions(
         return StreamingResponse(
             content=model.chat_stream(chat_request, user_name, api_key_name), media_type="text/event-stream"
         )
-    return model.chat(chat_request)
+    try:
+        return model.chat(chat_request)
+    except Exception as e:
+        print(f'exception: {e}')

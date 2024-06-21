@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Body, HTTPException
+from fastapi import APIRouter, Depends, Body, HTTPException, Request, status
 
 from api.auth import api_key_auth, get_api_key_name
 from api.models.bedrock import get_embeddings_model
@@ -22,6 +22,7 @@ model_region_map = get_model_region_map()
 
 @router.post("", response_model=EmbeddingsResponse)
 async def embeddings(
+        request: Request,
         embeddings_request: Annotated[
             EmbeddingsRequest,
             Body(
@@ -39,7 +40,14 @@ async def embeddings(
 ):
     if embeddings_request.model.lower().startswith("text-embedding-"):
         embeddings_request.model = DEFAULT_EMBEDDING_MODEL
-    user_name = api_key_auth(credentials)
+    current_path = request.url.path
+
+    user_name, error_response =  api_key_auth(credentials, current_path)
+    if error_response:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API Key or JWT Cognito Access Token"
+        )
+
     if credentials.credentials.startswith("sk-"):
         api_key_name = get_api_key_name(credentials.credentials)
 
