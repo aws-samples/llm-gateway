@@ -16,7 +16,6 @@ llm_gateway_url = "https://llmgatewayapi2.mirodrr.people.aws.dev"
 llm_gateway_llm_url = f'{llm_gateway_url}/api/v1'
 ApiKeyURL = llm_gateway_url + "/apikey"
 os.environ['OPENAI_BASE_URL'] = llm_gateway_llm_url
-#os.environ['OPENAI_API_KEY'] = 'sk-0f22e28e1244446d95b01f8bed8729e3a4cc6075628f3b07a241f71506b039cd'
 
 def read_resources(file_path):
     """ Read resources from the file and return UserPoolID and UserPoolClientID """
@@ -171,7 +170,11 @@ def create_api_key(access_token):
         print('Failed to create API key: HTTP status code ' + str(post_response.status_code) + ' Error: ' + str(message))
 
 user_pool_id, client_id = read_resources("../cdk/resources.txt")
-client_secret = "1jb1gnge9v3c0i479jov3vv2h3qvpkq8a7rl39uuu6qs20gkbhhp"
+with open('config.json', 'r') as file:
+    data = json.load(file)
+
+client_secret = data['client_secret']
+
 class OpenAIUser(HttpUser):
     wait_time = between(1, 2)
     host = llm_gateway_llm_url + "/chat/completions"  # Set the base host URL here
