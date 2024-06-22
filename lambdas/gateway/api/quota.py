@@ -45,12 +45,11 @@ def check_quota(user_name, api_key_name, model_id):
                 )
         else:
             pass
-            #print(f'Found user quota config: {quota_config}')
 
         add_to_cache(user_name, quota_config)
     else:
         pass
-        #print(f'Found cached quota config: {quota_config}')
+        #print(f'quota config config cache hit')
     
     #print(f'fetching requests_summary')
     requests_summary = get_user_requests_summary(user_name)

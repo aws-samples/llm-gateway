@@ -200,7 +200,7 @@ def authorized_response(user_name):
     return (user_name, None)
 
 def get_cached_authorization(token, current_method):
-    get_from_cache(token+current_method)
+    return get_from_cache(token+current_method)
 
 def cache_authorized(token, current_method, user_name):
     add_to_cache(token+current_method, authorized_cache_value + ":" + user_name)
@@ -222,7 +222,7 @@ def auth_handler(event, current_method):
         if cached_auth_response:
             logger.info(f'Cached response value for passed in token: {cached_auth_response}')
             if cached_auth_response.startswith(authorized_cache_value):
-                user_name = authorized_cache_value.split(":")[1]
+                user_name = cached_auth_response.split(":")[1]
                 return authorized_response(user_name)
             elif cached_auth_response.startswith(unauthorized_cache_value):
                 return unauthorized_response()

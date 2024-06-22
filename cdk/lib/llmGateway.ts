@@ -59,6 +59,8 @@ export class LlmGatewayStack extends cdk.Stack {
   enabledModels = this.node.tryGetContext("enabledModels");
   benchmarkMode = String(this.node.tryGetContext("llmGatewayIsPublic")).toLowerCase() == "true";
   benchmarkRepoName = this.node.tryGetContext("benchmarkRepoName");
+  llmGatewayInstanceCount = parseInt(this.node.tryGetContext("llmGatewayInstanceCount"));
+  llmGatewayVcpus = parseInt(this.node.tryGetContext("llmGatewayVcpus"));
 
   apiKeyValueHashIndex = "ApiKeyValueHashIndex";
   apiKeyTableName = "ApiKeyTable";
@@ -160,8 +162,7 @@ export class LlmGatewayStack extends cdk.Stack {
       encryptionKey: kmsKey,
       pointInTimeRecovery: true,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
-      readCapacity: 100,
-      writeCapacity:100
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST
     });
     return table;
   }
@@ -187,8 +188,7 @@ export class LlmGatewayStack extends cdk.Stack {
       encryptionKey: kmsKey,
       pointInTimeRecovery: true,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
-      readCapacity: 100,
-      writeCapacity:100
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST
     });
 
     if (secondaryIndexName && secondaryIndexPartitionKeyName) {
@@ -200,8 +200,6 @@ export class LlmGatewayStack extends cdk.Stack {
           type: dynamodb.AttributeType.STRING,
         },
         projectionType: dynamodb.ProjectionType.ALL, // Determines which attributes will be copied to the index
-        readCapacity: 400,
-        writeCapacity:25
       });
     }
 
@@ -541,11 +539,12 @@ export class LlmGatewayStack extends cdk.Stack {
     benchmarkEcr: ecr.IRepository
   ) {
 
-    const kmsKey = new kms.Key(this, "llmGatewayKmsKey", {
+    const kmsKey = new kms.Key(this, "llmGatewayKmsKey2", {
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
       keyUsage: kms.KeyUsage.ENCRYPT_DECRYPT,
-      description: "llmGatewayKmsKey",
+      description: "llmGatewayKmsKey2",
       enabled: true,
-      alias: "llmGatewayKmsKey",
+      alias: "llmGatewayKmsKey2",
       enableKeyRotation: true,
       policy: new iam.PolicyDocument({
         statements: [
@@ -759,15 +758,14 @@ export class LlmGatewayStack extends cdk.Stack {
       ecsExecutionRole.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonECSTaskExecutionRolePolicy'));
 
       const taskDefinition = new ecs.FargateTaskDefinition(this, 'llmGatewayTaskDefinition', {
-        memoryLimitMiB: 4096,
-        cpu: 2048,
+        memoryLimitMiB: this.llmGatewayVcpus * 1024 * 2,
+        cpu: this.llmGatewayVcpus * 1024,
         executionRole: ecsExecutionRole,
         taskRole: ecsExecutionRole,
         runtimePlatform: {
           cpuArchitecture: this.architecture == "x86" ? ecs.CpuArchitecture.X86_64 : ecs.CpuArchitecture.ARM64,
           operatingSystemFamily: ecs.OperatingSystemFamily.LINUX
         },
-        
       });
 
       const container = taskDefinition.addContainer('llmGateway', {
@@ -786,7 +784,7 @@ export class LlmGatewayStack extends cdk.Stack {
         serviceName: llmGatewayEcsTask,
         cluster,
         taskDefinition,
-        desiredCount: 32,
+        desiredCount: this.llmGatewayInstanceCount,
         securityGroups: [llmGatewayAlbSecurityGroup],
         assignPublicIp: false,
         circuitBreaker: {

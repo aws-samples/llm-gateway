@@ -211,7 +211,7 @@ class BedrockModel(BaseChatModel):
             raise HTTPException(status_code=500, detail=str(e))
         return response
 
-    def chat(self, chat_request: ChatRequest) -> ChatResponse:
+    def chat(self, chat_request: ChatRequest, user_name, api_key_name) -> ChatResponse:
         """Default implementation for Chat API."""
 
         message_id = self.generate_message_id()
@@ -226,6 +226,16 @@ class BedrockModel(BaseChatModel):
         input_tokens = response["usage"]["inputTokens"]
         output_tokens = response["usage"]["outputTokens"]
         finish_reason = response["stopReason"]
+
+        #print(f'stream_response.usage: {usage}')
+        input_cost = calculate_input_cost(input_tokens, chat_request.model)
+        #print(f'usage.prompt_tokens: {usage.prompt_tokens} input_cost: {input_cost}')
+        output_cost = calculate_output_cost(output_tokens, chat_request.model)
+        #print(f'usage.completion_tokens: {usage.completion_tokens} output_cost: {output_cost}')
+        total_cost = input_cost + output_cost
+        #print(f'total_cost: {total_cost}')
+        update_quota(user_name, total_cost)
+        create_request_detail(user_name, api_key_name, total_cost, input_tokens, output_tokens, chat_request.model, "Success")
 
         chat_response = self._create_response(
             model=chat_request.model,

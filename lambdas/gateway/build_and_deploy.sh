@@ -1,12 +1,13 @@
 #!/bin/bash
 
-if [ $# -ne 2 ]; then
-  echo "Usage: $0 <APP_NAME> <SERVERLESS_API>"
+if [ $# -ne 3 ]; then
+  echo "Usage: $0 <APP_NAME> <SERVERLESS_API> <LLM_GATEWAY_VCPUS>"
   exit 1
 fi
 
 APP_NAME=$1
 SERVERLESS_API=$2
+LLM_GATEWAY_VCPUS=$3
 # Convert SERVERLESS_API to lowercase using tr and check if it is "true"
 if [ "$(echo "$SERVERLESS_API" | tr '[:upper:]' '[:lower:]')" = "true" ]; then
   DOCKERFILE=Dockerfile_lambda
@@ -43,7 +44,8 @@ esac
 
 echo $ARCH
 
+echo $LLM_GATEWAY_VCPUS
 aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
-docker build --platform $ARCH -f $DOCKERFILE -t $APP_NAME .
+docker build --build-arg LLM_GATEWAY_VCPUS=$LLM_GATEWAY_VCPUS --platform $ARCH -f $DOCKERFILE -t $APP_NAME .
 docker tag $APP_NAME\:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$APP_NAME\:latest
 docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$APP_NAME\:latest

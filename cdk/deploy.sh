@@ -44,7 +44,7 @@ echo $ARCH
 
 echo $ECR_LLM_GATEWAY_REPOSITORY
 cd ../lambdas/gateway
-./build_and_deploy.sh $ECR_LLM_GATEWAY_REPOSITORY $SERVERLESS_API
+./build_and_deploy.sh $ECR_LLM_GATEWAY_REPOSITORY $SERVERLESS_API $LLM_GATEWAY_VCPUS
 
 #navigate back to the original directory
 cd -
@@ -130,6 +130,8 @@ cdk deploy "$STACK_NAME" \
 --context debug=$DEBUG \
 --context benchmarkMode=$BENCHMARK_MODE \
 --context benchmarkRepoName=$ECR_BENCHMARK_REPOSITORY \
+--context llmGatewayInstanceCount=$LLM_GATEWAY_INSTANCE_COUNT \
+--context llmGatewayVcpus=$LLM_GATEWAY_VCPUS \
 --outputs-file ./outputs.json
 
 # Check if the deployment was successful
@@ -196,7 +198,7 @@ if [ $? -eq 0 ]; then
             --cluster $LLM_GATEWAY_ECS_CLUSTER \
             --service $LLM_GATEWAY_ECS_TASK \
             --force-new-deployment \
-            --desired-count 32 \
+            --desired-count $(($LLM_GATEWAY_INSTANCE_COUNT)) \
             --no-cli-pager
     fi
 

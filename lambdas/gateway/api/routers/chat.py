@@ -69,6 +69,6 @@ def chat_completions(
             content=model.chat_stream(chat_request, user_name, api_key_name), media_type="text/event-stream"
         )
     try:
-        return model.chat(chat_request)
+        return model.chat(chat_request, user_name, api_key_name)
     except Exception as e:
         print(f'exception: {e}')

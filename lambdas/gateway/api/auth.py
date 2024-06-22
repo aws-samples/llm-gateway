@@ -18,6 +18,7 @@ API_KEY_TABLE_NAME = os.environ.get("API_KEY_TABLE_NAME", None)
 SALT_SECRET = os.environ.get("SALT_SECRET")
 
 cache = TTLCache(maxsize=10000, ttl=1200)
+api_key_name_cache = TTLCache(maxsize=10000, ttl=1200)
 
 authorized_cache_value = "authorized"
 unauthorized_cache_value = "unauthorized"
@@ -25,12 +26,16 @@ unauthorized_cache_value = "unauthorized"
 security = HTTPBearer()
 secrets_manager_client = boto3.client("secretsmanager")
 
+def add_to_api_key_cache(key, value):
+    cache[key] = value
+
+def get_from_api_key_cache(key):
+    return cache.get(key, None)
+
 def add_to_cache(key, value):
-    print(f'Adding key to cache: {key}')
     cache[key] = value
 
 def get_from_cache(key):
-    print(f'searching for key in cache: {key}')
     return cache.get(key, None)
 
 def unauthorized_response():
@@ -43,7 +48,7 @@ def authorized_response(user_name):
     return (user_name, None)
 
 def get_cached_authorization(token, current_method):
-    get_from_cache(token+current_method)
+    return get_from_cache(token+current_method)
 
 def cache_authorized(token, current_method, user_name):
     add_to_cache(token+current_method, authorized_cache_value + ":" + user_name)
@@ -55,20 +60,20 @@ def api_key_auth(
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     current_method
 ):
-    print(f'current_method: {current_method}')
+    #print(f'current_method: {current_method}')
     bearer_token = credentials.credentials
     cached_auth_response = get_cached_authorization(bearer_token, current_method)
     if cached_auth_response:
-        print(f'using the cache')
+        #print(f'auth cache hit')
         if cached_auth_response.startswith(authorized_cache_value):
-            user_name = authorized_cache_value.split(":")[1]
+            user_name = cached_auth_response.split(":")[1]
             return authorized_response(user_name)
         elif cached_auth_response.startswith(unauthorized_cache_value):
             return unauthorized_response()
         else:
             return unauthorized_response()
 
-    print(f'not using the cache')
+    #print(f'not using the cache')
     try:
         if bearer_token.startswith("sk-"):
             user_name = get_user_name_api_key(bearer_token)
@@ -174,8 +179,14 @@ def get_user_name_api_key(authorization_header):
 
 def get_api_key_name(api_key):
     hashed_api_key_value = hash_api_key(api_key)
+    cached_api_key_name = get_from_api_key_cache(hashed_api_key_value)
+    if cached_api_key_name:
+        return cached_api_key_name
+    
     api_key_document = query_by_api_key_hash(hashed_api_key_value)
-    return api_key_document.get('api_key_name')
+    api_key_name = api_key_document.get('api_key_name')
+    add_to_api_key_cache(hashed_api_key_value, api_key_name)
+    return api_key_name
 
 def get_user_info_cognito(authorization_header):
     url = f'https://{COGNITO_DOMAIN_PREFIX}.auth.{REGION}.amazoncognito.com/oauth2/userInfo'

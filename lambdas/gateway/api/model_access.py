@@ -53,13 +53,12 @@ def get_allowed_model_list(user_name) -> List[str]:
                 )
         else:
             pass
-            #print(f'Found user model access config: {model_access_config}')
 
         add_to_cache(user_name, model_access_config)
     else:
         pass
-        #print(f'Found cached model access config: {model_access_config}')
-    
+        #print(f'model access config cache hit')
+
     return model_access_config["model_access_list"].split(",")
 
 def get_user_model_access_config(user_name):
