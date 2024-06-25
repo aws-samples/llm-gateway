@@ -57,7 +57,7 @@ export class LlmGatewayStack extends cdk.Stack {
   modelAccessRepoName = this.node.tryGetContext("modelAccessRepoName");
   debug = this.node.tryGetContext("debug");
   enabledModels = this.node.tryGetContext("enabledModels");
-  benchmarkMode = String(this.node.tryGetContext("llmGatewayIsPublic")).toLowerCase() == "true";
+  benchmarkMode = String(this.node.tryGetContext("benchmarkMode")).toLowerCase() == "true";
   benchmarkRepoName = this.node.tryGetContext("benchmarkRepoName");
   llmGatewayInstanceCount = parseInt(this.node.tryGetContext("llmGatewayInstanceCount"));
   llmGatewayVcpus = parseInt(this.node.tryGetContext("llmGatewayVcpus"));
