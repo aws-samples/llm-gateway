@@ -794,6 +794,17 @@ export class LlmGatewayStack extends cdk.Stack {
         healthCheckGracePeriod: cdk.Duration.seconds(60),
       });
 
+      const scaling = service.autoScaleTaskCount({
+        minCapacity: 1,
+        maxCapacity: 10,
+      });
+      
+      scaling.scaleOnCpuUtilization('CpuScaling', {
+        targetUtilizationPercent: 75,
+        scaleInCooldown: cdk.Duration.seconds(60),
+        scaleOutCooldown: cdk.Duration.seconds(60)
+      });
+
       //Create a target group for the ECS task
       targetGroupLlmGateway = this.createEcsTargetGroup(vpc, service, this.llmGatewayIsPublic ? "Public" : "Private")
 

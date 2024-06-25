@@ -10,6 +10,7 @@ import hashlib
 import botocore
 from cachetools import TTLCache
 import traceback
+from api.clients import get_dynamo_db_client
 
 ## BEGIN ENVIORNMENT VARIABLES #################################################
 COGNITO_DOMAIN_PREFIX = os.environ.get("COGNITO_DOMAIN_PREFIX")
@@ -123,12 +124,8 @@ def query_by_api_key_hash(api_key_hash):
     Returns:
         dict: A dictionary containing the username and api_key_name if found; otherwise, None.
     """
-    client_config = botocore.config.Config(
-            max_pool_connections=50,
-        )
-    # Initialize a DynamoDB resource. Make sure AWS credentials and region are configured.
-    dynamodb = boto3.resource('dynamodb', config=client_config)
 
+    dynamodb = get_dynamo_db_client()
     # Access the DynamoDB table
     table = dynamodb.Table(API_KEY_TABLE_NAME)
 

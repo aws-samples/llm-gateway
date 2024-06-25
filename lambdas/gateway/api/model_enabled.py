@@ -26,7 +26,7 @@ for enabled_model in enabled_models_list:
     if region not in region_client_map:
         print(f'Creating boto3 client')
         client_config = botocore.config.Config(
-            max_pool_connections=50,
+            max_pool_connections=1000,
         )
 
         if BENCHMARK_MODE:

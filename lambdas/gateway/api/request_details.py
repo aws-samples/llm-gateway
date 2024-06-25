@@ -4,10 +4,12 @@ from datetime import datetime, timezone
 import logging
 from api.setting import DEBUG
 import decimal
+from api.clients import get_dynamo_db_client
 
 REQUEST_DETAILS_TABLE_NAME = os.environ.get("REQUEST_DETAILS_TABLE_NAME")
 
-table = boto3.resource("dynamodb").Table(REQUEST_DETAILS_TABLE_NAME)
+dynamodb = get_dynamo_db_client()
+table = dynamodb.Table(REQUEST_DETAILS_TABLE_NAME)
 logger = logging.getLogger(__name__)
 
 def get_current_timestamp():

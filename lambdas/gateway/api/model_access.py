@@ -10,6 +10,7 @@ import pandas as pd
 from botocore.exceptions import ClientError
 import decimal
 from api.request_details import create_request_detail
+from api.clients import get_dynamo_db_client
 
 DEFAULT_MODEL_ACCESS_PARAMETER_NAME = os.environ.get("DEFAULT_MODEL_ACCESS_PARAMETER_NAME")
 REGION = os.environ.get("REGION")
@@ -19,7 +20,7 @@ ssm_client = boto3.client("ssm")
 cache = TTLCache(maxsize=10000, ttl=1200)
 default_model_access_cache = TTLCache(maxsize=1, ttl=1200)
 
-dynamodb = boto3.resource('dynamodb')
+dynamodb = get_dynamo_db_client()
 model_access_table = dynamodb.Table(MODEL_ACCESS_TABLE_NAME)
 
 def check_model_access(user_name, api_key_name, model_id):

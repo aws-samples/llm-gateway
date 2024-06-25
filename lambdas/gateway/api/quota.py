@@ -10,13 +10,14 @@ from botocore.exceptions import ClientError
 import decimal
 from datetime import datetime, timezone, date, timedelta
 from api.request_details import create_request_detail
+from api.clients import get_dynamo_db_client
 
 DEFAULT_QUOTA_PARAMETER_NAME = os.environ.get("DEFAULT_QUOTA_PARAMETER_NAME")
 QUOTA_TABLE_NAME = os.environ.get("QUOTA_TABLE_NAME")
 REGION = os.environ.get("REGION")
 
 ssm_client = boto3.client("ssm")
-dynamodb = boto3.resource('dynamodb')
+dynamodb = get_dynamo_db_client()
 quota_table = dynamodb.Table(QUOTA_TABLE_NAME)
 
 cache = TTLCache(maxsize=10000, ttl=1200)

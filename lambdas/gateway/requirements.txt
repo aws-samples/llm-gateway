@@ -9,3 +9,4 @@ boto3==1.34.117
 botocore==1.34.117
 cachetools==5.3.3
 pandas==2.2.2
+anyio==4.4.0
