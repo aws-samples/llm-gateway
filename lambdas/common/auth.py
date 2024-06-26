@@ -25,6 +25,7 @@ NON_ADMIN_ENDPOINTS = [item.strip() for item in os.environ.get('NON_ADMIN_ENDPOI
 API_KEY_EXCLUDED_ENDPOINTS = [item.strip() for item in os.environ.get('API_KEY_EXCLUDED_ENDPOINTS', '').split(',')]
 SALT_SECRET = os.environ.get("SALT_SECRET")
 API_KEY_TABLE_NAME = os.environ.get("API_KEY_TABLE_NAME", None)
+BENCHMARK_MODE = os.environ["BENCHMARK_MODE"] == "true"
 
 authorized_cache_value = "authorized"
 unauthorized_cache_value = "unauthorized"
@@ -59,7 +60,7 @@ def get_salt():
 SALT = get_salt()
 
 def get_user_name(authorization_header, claims):
-    if claims['scope'] == "aws.cognito.signin.user.admin":
+    if claims['scope'] == "aws.cognito.signin.user.admin" and BENCHMARK_MODE:
         print(f'Scope is "aws.cognito.signin.user.admin". Getting username directly from token')
         return claims['username']
     user_info = get_user_info_cognito(authorization_header, claims)
