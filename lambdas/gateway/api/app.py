@@ -6,15 +6,23 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from mangum import Mangum
+from contextlib import asynccontextmanager
+from anyio import to_thread
 
 from api.routers import model, chat, embeddings
 from api.setting import API_ROUTE_PREFIX, TITLE, DESCRIPTION, SUMMARY, VERSION
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    to_thread.current_default_thread_limiter().total_tokens = 1000
+    yield
 
 config = {
     "title": TITLE,
     "description": DESCRIPTION,
     "summary": SUMMARY,
     "version": VERSION,
+    "lifespan": lifespan
 }
 
 logging.basicConfig(

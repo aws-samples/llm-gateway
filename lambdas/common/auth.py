@@ -13,7 +13,7 @@ from cachetools import TTLCache
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-cache = TTLCache(maxsize=5000, ttl=300)
+cache = TTLCache(maxsize=10000, ttl=300)
 
 # Configuration from environment variables
 USER_POOL_ID = os.environ['USER_POOL_ID']
@@ -58,9 +58,14 @@ def get_salt():
     
 SALT = get_salt()
 
-def get_user_name(authorization_header):
-    user_info = get_user_info_cognito(authorization_header)
+def get_user_name(authorization_header, claims):
+    if claims['scope'] == "aws.cognito.signin.user.admin":
+        print(f'Scope is "aws.cognito.signin.user.admin". Getting username directly from token')
+        return claims['username']
+    user_info = get_user_info_cognito(authorization_header, claims)
+    print(f'user_info: {user_info}')
     user_name = user_info["preferred_username"] if 'preferred_username' in user_info  else user_info["username"]
+    print(f'user_name: {user_name}')
     return user_name
 
 def get_user_info_cognito(authorization_header):
@@ -73,11 +78,14 @@ def get_user_info_cognito(authorization_header):
 
     # Make the HTTP GET request to the User Info endpoint
     response = requests.get(url, headers=headers, timeout=60)
-
+    print(f'response: {response}. response.status_code: {response.status_code}')
     # Check if the request was successful
     if response.status_code == 200:
+        print(f'response.json(): {response.json()}')
         return response.json()  # Returns the user info as a JSON object
     else:
+        print(f'response.text: {response.text}')
+
         return response.status_code, response.text  # Returns error status and message if not successful
 
 def validateJWT(token, app_client_id, keys):
@@ -192,7 +200,7 @@ def authorized_response(user_name):
     return (user_name, None)
 
 def get_cached_authorization(token, current_method):
-    get_from_cache(token+current_method)
+    return get_from_cache(token+current_method)
 
 def cache_authorized(token, current_method, user_name):
     add_to_cache(token+current_method, authorized_cache_value + ":" + user_name)
@@ -214,7 +222,7 @@ def auth_handler(event, current_method):
         if cached_auth_response:
             logger.info(f'Cached response value for passed in token: {cached_auth_response}')
             if cached_auth_response.startswith(authorized_cache_value):
-                user_name = authorized_cache_value.split(":")[1]
+                user_name = cached_auth_response.split(":")[1]
                 return authorized_response(user_name)
             elif cached_auth_response.startswith(unauthorized_cache_value):
                 return unauthorized_response()
@@ -244,7 +252,8 @@ def auth_handler(event, current_method):
             if not response:
                 cache_unauthorized(bearer_token, current_method)
                 return unauthorized_response()
-            user_name = get_user_name(bearer_token)
+            print(f'getting username with bearer_token: {bearer_token}')
+            user_name = get_user_name(bearer_token, response)
 
         logger.info(response)
 

@@ -10,56 +10,60 @@ from botocore.exceptions import ClientError
 import decimal
 from datetime import datetime, timezone, date, timedelta
 from api.request_details import create_request_detail
+from api.clients import get_dynamo_db_client
 
 DEFAULT_QUOTA_PARAMETER_NAME = os.environ.get("DEFAULT_QUOTA_PARAMETER_NAME")
 QUOTA_TABLE_NAME = os.environ.get("QUOTA_TABLE_NAME")
 REGION = os.environ.get("REGION")
 
 ssm_client = boto3.client("ssm")
-dynamodb = boto3.resource('dynamodb')
+dynamodb = get_dynamo_db_client()
 quota_table = dynamodb.Table(QUOTA_TABLE_NAME)
 
-cache = TTLCache(maxsize=5000, ttl=60)
+cache = TTLCache(maxsize=10000, ttl=1200)
+default_quota_cache = TTLCache(maxsize=1, ttl=1200)
 
 cost_df = pd.read_csv('/app/api/data/cost_db.csv', dtype={'cost_per_token_input': float, 'cost_per_token_output': float})
-print(f'cost_df: {cost_df}')
+#print(f'cost_df: {cost_df}')
 
 def check_quota(user_name, api_key_name, model_id):
-    print('Checking if user has exceeded usage quota')
+    #print('Checking if user has exceeded usage quota')
     quota_config = get_from_cache(user_name)
 
     if not quota_config:
-        print("No cached quota, getting user's quota config")
+        #print("No cached quota, getting user's quota config")
         quota_config = get_user_quota_config(user_name)
         
         if not quota_config:
-            print('No user specific config, getting default quota config')
+            #print('No user specific config, getting default quota config')
             quota_config = get_default_quota()
             if quota_config:
-                print(f'Found default quota config: {quota_config}')
+                pass
+                #print(f'Found default quota config: {quota_config}')
             else:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Quota config not configured correctly"
                 )
         else:
-            print(f'Found user quota config: {quota_config}')
+            pass
 
         add_to_cache(user_name, quota_config)
     else:
-        print(f'Found cached quota config: {quota_config}')
+        pass
+        #print(f'quota config config cache hit')
     
-    print(f'fetching requests_summary')
+    #print(f'fetching requests_summary')
     requests_summary = get_user_requests_summary(user_name)
-    print(f'requests_summary: {requests_summary}')
+    #print(f'requests_summary: {requests_summary}')
 
     if not requests_summary:
-        print(f"Didn't find requests_summary, creating new one")
+        #print(f"Didn't find requests_summary, creating new one")
         new_requests_summary = build_new_requests_summary(user_name, quota_config)
-        print(f"new_requests_summary: {new_requests_summary}")
+        #print(f"new_requests_summary: {new_requests_summary}")
         create_requests_summary(new_requests_summary)
     else:
         quota_limit_map = requests_summary.get('quota_limit_map', None)
-        print(f'quota_limit_map: {quota_limit_map}')
+        #print(f'quota_limit_map: {quota_limit_map}')
         request_summary_needs_update = False
         for frequency, limit in quota_config.items():
             current_time_period = get_current_time_period(frequency)
@@ -77,10 +81,10 @@ def check_quota(user_name, api_key_name, model_id):
                         status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=f"Quota exceeded. Quota frequency: {frequency}. Total usage: {format_two_significant_figures(quota_limit_map[frequency]["total_estimate_cost"])}. Limit: {limit}"
                     )
         if request_summary_needs_update:
-            print(f'request summary needs update, updating...')
+            #print(f'request summary needs update, updating...')
             update_requests_summary(requests_summary, quota_config, user_name)
 
-    print(f'Quota is not exceeded. Processing request.')
+    #print(f'Quota is not exceeded. Processing request.')
     return requests_summary
 
 
@@ -112,7 +116,7 @@ def create_requests_summary(requests_summary):
             Item=requests_summary,
             ConditionExpression='attribute_not_exists(username) AND attribute_not_exists(document_type_id)'
         )
-        print("Item created successfully:", response)
+        #print("Item created successfully:", response)
     except ClientError as e:
         if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
             print("Item already exists. Continuing...")
@@ -134,7 +138,7 @@ def update_requests_summary(requests_summary, quota_config, user_name):
                 ':last_known_time': last_known_update_time
             }
         )
-        print("Item successfully uploaded:", response)
+        #print("Item successfully uploaded:", response)
     except ClientError as e:
         if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
             print("Upload failed: Last updated time has changed since last read. Reading the latest document and seeing if it still needs updating")
@@ -176,14 +180,14 @@ def get_user_requests_summary(user_name):
 
 def get_user_document(user_name, document_type):    
     document_type_id = f'{document_type}:{user_name}'
-    print(f'username: {user_name} document_type_id: {document_type_id}')
+    #print(f'username: {user_name} document_type_id: {document_type_id}')
 
     response = quota_table.query(
         KeyConditionExpression=Key('username').eq(user_name) & Key('document_type_id').eq(document_type_id)
     )
-    print(f'response: {response}')
-    print(f'response: {response["Items"]}')
-    print(f'not response["Items"]: {not response["Items"]}')
+    # print(f'response: {response}')
+    # print(f'response: {response["Items"]}')
+    # print(f'not response["Items"]: {not response["Items"]}')
     if not response["Items"]:
         return None
 
@@ -196,9 +200,14 @@ def get_from_cache(key):
     return cache.get(key, None)
 
 def get_default_quota():
+    default_quota_config_dict = default_quota_cache.get("default", None)
+    if default_quota_config_dict:
+        return default_quota_config_dict
+
     response = ssm_client.get_parameter(Name=DEFAULT_QUOTA_PARAMETER_NAME, WithDecryption=True)
     parameter_value = response['Parameter']['Value']
     default_quota_config_dict = json.loads(parameter_value)
+    default_quota_cache["default"] = default_quota_config_dict
     return default_quota_config_dict
 
 def calculate_input_cost(prompt_tokens, model):
@@ -208,13 +217,13 @@ def calculate_output_cost(completion_tokens, model):
     return calculate_cost(completion_tokens, model, 'cost_per_token_output')
 
 def calculate_cost(num_tokens, model, cost_type):
-    print(f'cost_df: {cost_df}')
-    print(f'model: {model} region: {REGION} type: {cost_type}')
+    # print(f'cost_df: {cost_df}')
+    # print(f'model: {model} region: {REGION} type: {cost_type}')
     filtered_df = cost_df[
         (cost_df['model_name'] == model) & 
         ((cost_df['region'] == REGION) | (cost_df['region'].isna()))
     ]
-    print(f'filtered_df: {filtered_df}')
+    #print(f'filtered_df: {filtered_df}')
     costs_per_token = filtered_df.iloc[0][cost_type]
     return (num_tokens * costs_per_token) / 1000
 
@@ -246,6 +255,6 @@ def update_quota(user_name, total_cost):
             },
             ReturnValues="UPDATED_NEW"
         )
-        print("Update succeeded:", response)
+        #print("Update succeeded:", response)
     except Exception as e:
         print("Error updating item:", e)

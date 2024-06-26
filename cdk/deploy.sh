@@ -44,7 +44,7 @@ echo $ARCH
 
 echo $ECR_LLM_GATEWAY_REPOSITORY
 cd ../lambdas/gateway
-./build_and_deploy.sh $ECR_LLM_GATEWAY_REPOSITORY $SERVERLESS_API
+./build_and_deploy.sh $ECR_LLM_GATEWAY_REPOSITORY $SERVERLESS_API $LLM_GATEWAY_VCPUS
 
 #navigate back to the original directory
 cd -
@@ -66,6 +66,15 @@ cd ../lambdas/model_access
 #navigate back to the original directory
 cd -
 
+if [ "$BENCHMARK_MODE" = "true" ]; then
+    echo "Benchmark mode is enabled."
+    cd ../lambdas/benchmark
+    ./build_and_deploy.sh $ECR_BENCHMARK_REPOSITORY
+
+    #navigate back to the original directory
+    cd -
+fi
+
 echo $UI_CERT_ARN
 echo $UI_DOMAIN_NAME
 echo $ECR_STREAMLIT_REPOSITORY
@@ -85,6 +94,7 @@ echo $ADMIN_LIST
 echo $DEFAULT_MODEL_ACCESS
 echo $ECR_MODEL_ACCESS_REPOSITORY
 echo $ENABLED_MODELS
+echo $BENCHMARK_MODE
 cd ../streamlit
 ./build_and_deploy.sh $ECR_STREAMLIT_REPOSITORY
 
@@ -118,6 +128,10 @@ cdk deploy "$STACK_NAME" \
 --context modelAccessRepoName=$ECR_MODEL_ACCESS_REPOSITORY \
 --context enabledModels=$ENABLED_MODELS \
 --context debug=$DEBUG \
+--context benchmarkMode=$BENCHMARK_MODE \
+--context benchmarkRepoName=$ECR_BENCHMARK_REPOSITORY \
+--context llmGatewayInstanceCount=$LLM_GATEWAY_INSTANCE_COUNT \
+--context llmGatewayVcpus=$LLM_GATEWAY_VCPUS \
 --outputs-file ./outputs.json
 
 # Check if the deployment was successful
@@ -131,6 +145,7 @@ if [ $? -eq 0 ]; then
     LLM_GATEWAY_LAMBDA_FUNCTION=$(jq -r ".\"${STACK_NAME}\".LlmgatewayLambdaFunctionName" ./outputs.json)
     LLM_GATEWAY_ECS_TASK=$(jq -r ".\"${STACK_NAME}\".LlmgatewayEcsTask" ./outputs.json)
     LLM_GATEWAY_UI_ECS_TASK=$(jq -r ".\"${STACK_NAME}\".LlmgatewayUIEcsTask" ./outputs.json)
+    BENCHMARK_ECS_TASK=$(jq -r ".\"${STACK_NAME}\".BenchmarkEcsTask" ./outputs.json)
     LLM_GATEWAY_ECS_CLUSTER=$(jq -r ".\"${STACK_NAME}\".LlmgatewayEcsCluster" ./outputs.json)
     QUOTA_LAMBDA_FUNCTION_NAME=$(jq -r ".\"${STACK_NAME}\".QuotaLambdaFunctionName" ./outputs.json)
     MODEL_ACCESS_LAMBDA_FUNCTION_NAME=$(jq -r ".\"${STACK_NAME}\".ModelAccessLambdaFunctionName" ./outputs.json)
@@ -182,6 +197,15 @@ if [ $? -eq 0 ]; then
         aws ecs update-service \
             --cluster $LLM_GATEWAY_ECS_CLUSTER \
             --service $LLM_GATEWAY_ECS_TASK \
+            --force-new-deployment \
+            --desired-count $(($LLM_GATEWAY_INSTANCE_COUNT)) \
+            --no-cli-pager
+    fi
+
+    if [ "$BENCHMARK_MODE" = "true" ]; then
+        aws ecs update-service \
+            --cluster $LLM_GATEWAY_ECS_CLUSTER \
+            --service $BENCHMARK_ECS_TASK \
             --force-new-deployment \
             --desired-count 1 \
             --no-cli-pager
