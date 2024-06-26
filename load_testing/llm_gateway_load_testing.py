@@ -12,7 +12,19 @@ import hmac
 import hashlib
 import base64
 
-llm_gateway_url = "https://llmgatewayapi2.mirodrr.people.aws.dev"
+def read_llmgateway_url(file_path):
+    """ Read resources from the file and return UserPoolID and UserPoolClientID """
+    with open(file_path, 'r', encoding="utf-8") as file:
+        content = file.read()
+    
+    resources = {}
+    for line in content.splitlines():
+        key, value = line.split('=')
+        resources[key.strip()] = value.strip()
+        
+    return resources['LLM_GATEWAY_DOMAIN_NAME'].replace('"', '')
+
+llm_gateway_url = f"https://{read_llmgateway_url("../cdk/.env")}"
 llm_gateway_llm_url = f'{llm_gateway_url}/api/v1'
 ApiKeyURL = llm_gateway_url + "/apikey"
 os.environ['OPENAI_BASE_URL'] = llm_gateway_llm_url
