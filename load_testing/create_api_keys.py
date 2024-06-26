@@ -6,9 +6,21 @@ import hmac
 import hashlib
 import base64
 import time
-llm_gateway_url = "https://llmgatewayapi2.mirodrr.people.aws.dev"
-ApiKeyURL = llm_gateway_url + "/apikey"
 
+def read_llmgateway_url(file_path):
+    """ Read resources from the file and return UserPoolID and UserPoolClientID """
+    with open(file_path, 'r', encoding="utf-8") as file:
+        content = file.read()
+    
+    resources = {}
+    for line in content.splitlines():
+        key, value = line.split('=')
+        resources[key.strip()] = value.strip()
+        
+    return resources['LLM_GATEWAY_DOMAIN_NAME'].replace('"', '')
+
+llm_gateway_url = f"https://{read_llmgateway_url("../cdk/.env")}"
+ApiKeyURL = llm_gateway_url + "/apikey"
 
 def create_api_key(access_token):
     headers = {
@@ -64,7 +76,7 @@ def get_jwt_token(client_id, client_secret, username, password):
 
     raise Exception('Failed to get JWT token after maximum retries')
 
-def read_resources(file_path):
+def read_cognito_info(file_path):
     """ Read resources from the file and return UserPoolID and UserPoolClientID """
     with open(file_path, 'r', encoding="utf-8") as file:
         content = file.read()
@@ -76,14 +88,12 @@ def read_resources(file_path):
         
     return resources['UserPoolID'], resources['UserPoolClientID']
 
-
-
 if __name__ == "__main__":
     with open('config.json', 'r') as file:
         data = json.load(file)
 
     client_secret = data['client_secret']
-    user_pool_id, client_id = read_resources("../cdk/resources.txt")
+    user_pool_id, client_id = read_cognito_info("../cdk/resources.txt")
     api_keys = []
 
     with open('users.txt', 'r') as file:
