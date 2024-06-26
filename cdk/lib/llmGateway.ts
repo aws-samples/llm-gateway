@@ -1016,7 +1016,8 @@ export class LlmGatewayStack extends cdk.Stack {
         APP_CLIENT_ID: this.applicationLoadBalanceruserPoolClient.userPoolClientId,
         ADMIN_LIST: this.adminList,
         SALT_SECRET: saltSecret.secretName,
-        API_KEY_TABLE_NAME: apiKeyTable.tableName
+        API_KEY_TABLE_NAME: apiKeyTable.tableName,
+        BENCHMARK_MODE: String(this.benchmarkMode)
       },
       timeout: cdk.Duration.minutes(15),
       memorySize: 512,
@@ -1067,7 +1068,8 @@ export class LlmGatewayStack extends cdk.Stack {
         APP_CLIENT_ID: this.applicationLoadBalanceruserPoolClient.userPoolClientId,
         ADMIN_LIST: this.adminList,
         SALT_SECRET: saltSecret.secretName,
-        API_KEY_TABLE_NAME: apiKeyTable.tableName
+        API_KEY_TABLE_NAME: apiKeyTable.tableName,
+        BENCHMARK_MODE: String(this.benchmarkMode)
       },
       timeout: cdk.Duration.minutes(15),
       memorySize: 512,
