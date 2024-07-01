@@ -63,7 +63,7 @@ def get_user_name(authorization_header, claims):
     if claims['scope'] == "aws.cognito.signin.user.admin" and BENCHMARK_MODE:
         print(f'Scope is "aws.cognito.signin.user.admin". Getting username directly from token')
         return claims['username']
-    user_info = get_user_info_cognito(authorization_header, claims)
+    user_info = get_user_info_cognito(authorization_header)
     print(f'user_info: {user_info}')
     user_name = user_info["preferred_username"] if 'preferred_username' in user_info  else user_info["username"]
     print(f'user_name: {user_name}')
