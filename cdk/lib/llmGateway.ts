@@ -97,61 +97,6 @@ export class LlmGatewayStack extends cdk.Stack {
     }
   }
 
-  createTokenCountLambda(roleName: string, costTable: dynamodb.Table) {
-    // Cerate the IAM role.
-    const role = new iam.Role(this, roleName, {
-      assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
-      roleName: roleName,
-      inlinePolicies: {
-        LambdaPermissions: new iam.PolicyDocument({
-          statements: [
-            new iam.PolicyStatement({
-              sid: "HistoryDynamoDBAccess",
-              effect: iam.Effect.ALLOW,
-              actions: [
-                "dynamodb:BatchWriteItem",
-                "dynamodb:DeleteItem",
-                "dynamodb:GetItem",
-                "dynamodb:PutItem",
-                "dynamodb:Query",
-                "dynamodb:Scan",
-                "dynamodb:UpdateItem",
-              ],
-              resources: [costTable.tableArn],
-            }),
-            new iam.PolicyStatement({
-              sid: "WriteToCloudWatchLogs",
-              effect: iam.Effect.ALLOW,
-              actions: [
-                "logs:CreateLogGroup",
-                "logs:CreateLogStream",
-                "logs:PutLogEvents",
-              ],
-              resources: ["*"],
-            }),
-          ],
-        }),
-      },
-    });
-
-    // Create Lambda function.
-    const vpcParams = this.configureVpcParams();
-    return new lambda.Function(this, "LlmGatewayTokenCounter", {
-      role: role,
-      runtime: lambda.Runtime.PYTHON_3_12,
-      architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
-      handler: "app.lambda_handler",
-      code: lambda.Code.fromAsset(
-        path.join(__dirname, "../../lambdas/count_tokens/")
-      ),
-      environment: {
-        COST_TABLE_NAME: costTable.tableName,
-      },
-      timeout: cdk.Duration.minutes(1),
-      ...vpcParams,
-    });
-  }
-
   createSecureDdbTable(tableName: string, partitionKeyName: string, kmsKey: kms.Key) {
     const table = new dynamodb.Table(this, tableName, {
       partitionKey: {
@@ -225,7 +170,16 @@ export class LlmGatewayStack extends cdk.Stack {
       roleName: roleName,
       inlinePolicies: {
         LambdaPermissions: new iam.PolicyDocument({
-          statements: [
+            statements: [
+              new iam.PolicyStatement({
+                effect: iam.Effect.ALLOW,
+                actions: [
+                    "ec2:CreateNetworkInterface",
+                    "ec2:DescribeNetworkInterfaces",
+                    "ec2:DeleteNetworkInterface"
+                ],
+                resources: ["*"],
+            }),
             new iam.PolicyStatement({
               sid: "InvokeBedrock",
               effect: iam.Effect.ALLOW,
@@ -307,7 +261,16 @@ export class LlmGatewayStack extends cdk.Stack {
       roleName: roleName,
       inlinePolicies: {
         LambdaPermissions: new iam.PolicyDocument({
-          statements: [
+            statements: [
+              new iam.PolicyStatement({
+                effect: iam.Effect.ALLOW,
+                actions: [
+                    "ec2:CreateNetworkInterface",
+                    "ec2:DescribeNetworkInterfaces",
+                    "ec2:DeleteNetworkInterface"
+                ],
+                resources: ["*"],
+            }),
             new iam.PolicyStatement({
               sid: "ApiKeyDynamoDBAccess",
               effect: iam.Effect.ALLOW,
@@ -373,6 +336,15 @@ export class LlmGatewayStack extends cdk.Stack {
       inlinePolicies: {
         LambdaPermissions: new iam.PolicyDocument({
           statements: [
+              new iam.PolicyStatement({
+                effect: iam.Effect.ALLOW,
+                actions: [
+                    "ec2:CreateNetworkInterface",
+                    "ec2:DescribeNetworkInterfaces",
+                    "ec2:DeleteNetworkInterface"
+                ],
+                resources: ["*"],
+            }),
             new iam.PolicyStatement({
               sid: "ApiKeyDynamoDBAccess",
               effect: iam.Effect.ALLOW,
@@ -443,6 +415,15 @@ export class LlmGatewayStack extends cdk.Stack {
       inlinePolicies: {
         LambdaPermissions: new iam.PolicyDocument({
           statements: [
+              new iam.PolicyStatement({
+                effect: iam.Effect.ALLOW,
+                actions: [
+                    "ec2:CreateNetworkInterface",
+                    "ec2:DescribeNetworkInterfaces",
+                    "ec2:DeleteNetworkInterface"
+                ],
+                resources: ["*"],
+            }),
             new iam.PolicyStatement({
               sid: "ApiKeyDynamoDBAccess",
               effect: iam.Effect.ALLOW,
@@ -496,24 +477,6 @@ export class LlmGatewayStack extends cdk.Stack {
         })
       }
     })
-  }
-
-  configureVpcParams(): object {
-    if (
-      Boolean(this.vpc) &&
-      Boolean(this.vpcSubnets) &&
-      Boolean(this.vpcSecurityGroup)
-    ) {
-      console.log(
-        "You have configured VPC usage for your Lambdas.\nNote that as of 2023-Dec-18, *API Gateway for WebSockets DOES NOT PROVIDE SUPPORT FOR VPC FEATURES*.\nIf you are configuring a VPC for API Gateway for a REST API, you can ignore this message."
-      );
-      return {
-        vpc: this.vpc,
-        vpcSubnets: { subnets: this.vpcSubnets },
-        securityGroups: [this.vpcSecurityGroup],
-      };
-    }
-    return {};
   }
 
   createEcsTargetGroup(vpc: ec2.Vpc, service: ecs.FargateService, type: string) : elbv2.ApplicationTargetGroup {
@@ -647,9 +610,34 @@ export class LlmGatewayStack extends cdk.Stack {
       trafficType: ec2.FlowLogTrafficType.ALL,
     });
 
+    vpc.addGatewayEndpoint('MyDynamoDbEndpoint', {
+      service: ec2.GatewayVpcEndpointAwsService.DYNAMODB,
+      subnets: [{subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS}]
+    });
+
+    const services = {
+      ecs: ec2.InterfaceVpcEndpointAwsService.ECS,
+      ecsTelemetry: ec2.InterfaceVpcEndpointAwsService.ECS_TELEMETRY,
+      ecrApi: ec2.InterfaceVpcEndpointAwsService.ECR,
+      ecrDkr: ec2.InterfaceVpcEndpointAwsService.ECR_DOCKER,
+      kms: ec2.InterfaceVpcEndpointAwsService.KMS,
+      logs: ec2.InterfaceVpcEndpointAwsService.CLOUDWATCH_LOGS,
+      secretsManager: ec2.InterfaceVpcEndpointAwsService.SECRETS_MANAGER,
+      bedrock: ec2.InterfaceVpcEndpointAwsService.BEDROCK,
+      bedrockRuntime: ec2.InterfaceVpcEndpointAwsService.BEDROCK_RUNTIME,
+      lambda: ec2.InterfaceVpcEndpointAwsService.LAMBDA
+    };
+
+    // Create the VPC Endpoints
+    for (const [name, service] of Object.entries(services)) {
+      new ec2.InterfaceVpcEndpoint(this, `${name}Endpoint`, {
+        vpc,
+        service,
+        privateDnsEnabled: true, // Enable private DNS within the VPC
+      });
+    }
 
     // Create Lambda function from the ECR image.
-    const vpcParams = this.configureVpcParams();
     let targetGroupLlmGateway :elbv2.ApplicationTargetGroup;
     let targetGroupBenchmark :elbv2.ApplicationTargetGroup;
     const LlmGatewayUrl = "https://" + this.llmGatewayDomainName
@@ -718,7 +706,7 @@ export class LlmGatewayStack extends cdk.Stack {
         environment: environment,
         timeout: cdk.Duration.minutes(15),
         memorySize: 512,
-        ...vpcParams,
+        vpc:vpc,
       });
 
       //Create a target group for the Lambda function
@@ -780,12 +768,20 @@ export class LlmGatewayStack extends cdk.Stack {
         protocol: ecs.Protocol.TCP
       });
 
+      const ecsSecurityGroup = new ec2.SecurityGroup(this, 'EcsSecurityGroup', {
+        vpc,
+        description: 'Security group for ECS',
+        allowAllOutbound: true,
+      });
+      ecsSecurityGroup.addIngressRule(ec2.Peer.securityGroupId(llmGatewayAlbSecurityGroup.securityGroupId), ec2.Port.HTTP)
+      ecsSecurityGroup.addIngressRule(ec2.Peer.securityGroupId(llmGatewayAlbSecurityGroup.securityGroupId), ec2.Port.HTTPS)
+
       const service = new ecs.FargateService(this, 'LlmGatewayApiService', {
         serviceName: llmGatewayEcsTask,
         cluster,
         taskDefinition,
         desiredCount: this.llmGatewayInstanceCount,
-        securityGroups: [llmGatewayAlbSecurityGroup],
+        securityGroups: [ecsSecurityGroup],
         assignPublicIp: false,
         circuitBreaker: {
           enable:true,
@@ -795,7 +791,7 @@ export class LlmGatewayStack extends cdk.Stack {
       });
 
       const scaling = service.autoScaleTaskCount({
-        minCapacity: 1,
+        minCapacity: this.llmGatewayInstanceCount,
         maxCapacity: 10,
       });
       
@@ -859,6 +855,8 @@ export class LlmGatewayStack extends cdk.Stack {
         removalPolicy: cdk.RemovalPolicy.DESTROY,
         encryptionKey: kmsKey
       });
+      cdk.Tags.of(logGroup).add("Group", 'Fake')
+
       const ecsBenchmarkExecutionRole = this.createLlmGatewayRole(
         "benchmarkEcsRole",
         quotaTable,
@@ -883,6 +881,8 @@ export class LlmGatewayStack extends cdk.Stack {
           operatingSystemFamily: ecs.OperatingSystemFamily.LINUX
         },
       });
+      cdk.Tags.of(benchmarkTaskDefinition).add("Group", 'Fake')
+
 
       const benchmarkContainer = benchmarkTaskDefinition.addContainer('benchmark', {
         image: ecs.ContainerImage.fromEcrRepository(benchmarkEcr, "latest"),
@@ -909,7 +909,10 @@ export class LlmGatewayStack extends cdk.Stack {
           rollback:true
         },
         healthCheckGracePeriod: cdk.Duration.seconds(60),
+        propagateTags: ecs.PropagatedTagSource.SERVICE,
       });
+
+      cdk.Tags.of(benchmarkService).add("Group", 'Fake')
 
       const type = this.llmGatewayIsPublic ? "Public" : "Private"
       targetGroupBenchmark = new elbv2.ApplicationTargetGroup(this, 'benchmarkEcsTargetGroup' + type, {
@@ -975,9 +978,9 @@ export class LlmGatewayStack extends cdk.Stack {
       description: 'The url of the llmgateway private application load balancer'
     });
 
-    this.createApiKeyHandlerApi(llmGatewayAlb, llmGatewayAppListener, apiKeyTable, saltSecret, vpcParams, apiKeyEcr, kmsKey)
-    this.createQuotaHandlerApi(llmGatewayAlb, llmGatewayAppListener, apiKeyTable, saltSecret, quotaTable, vpcParams, quotaEcr, defaultQuotaParameter, kmsKey)
-    this.createModelAccessHandlerApi(llmGatewayAlb, llmGatewayAppListener, apiKeyTable, saltSecret, modelAccessTable, vpcParams, modelAccessEcr, defaultModelAccessParameter, kmsKey)
+    this.createApiKeyHandlerApi(llmGatewayAlb, llmGatewayAppListener, apiKeyTable, saltSecret, vpc, apiKeyEcr, kmsKey)
+    this.createQuotaHandlerApi(llmGatewayAlb, llmGatewayAppListener, apiKeyTable, saltSecret, quotaTable, vpc, quotaEcr, defaultQuotaParameter, kmsKey)
+    this.createModelAccessHandlerApi(llmGatewayAlb, llmGatewayAppListener, apiKeyTable, saltSecret, modelAccessTable, vpc, modelAccessEcr, defaultModelAccessParameter, kmsKey)
 
 
     this.setUpStreamlit(llmGatewayAlb, llmGatewayAppListener, llmGatewayAlbSecurityGroup, cluster, vpc, LlmGatewayUrl, kmsKey)
@@ -993,7 +996,7 @@ export class LlmGatewayStack extends cdk.Stack {
     });
   }
 
-  createModelAccessHandlerApi(lb: elbv2.ApplicationLoadBalancer, appListener:elbv2.ApplicationListener, apiKeyTable: dynamodb.ITable, saltSecret: secretsmanager.ISecret, modelAccessTable: dynamodb.ITable, vpcParams: object, modelAccessEcr: ecr.IRepository, defaultModelAccessParameter:ssm.StringParameter, ksmKey: kms.Key) {
+  createModelAccessHandlerApi(lb: elbv2.ApplicationLoadBalancer, appListener:elbv2.ApplicationListener, apiKeyTable: dynamodb.ITable, saltSecret: secretsmanager.ISecret, modelAccessTable: dynamodb.ITable, vpc: ec2.Vpc, modelAccessEcr: ecr.IRepository, defaultModelAccessParameter:ssm.StringParameter, ksmKey: kms.Key) {
     const logGroup = new logs.LogGroup(this, 'ModelAccessHandlerLogGroup', {
       logGroupName: 'ModelAccessHandlerLogGroup',
       removalPolicy: cdk.RemovalPolicy.DESTROY,
@@ -1021,7 +1024,7 @@ export class LlmGatewayStack extends cdk.Stack {
       },
       timeout: cdk.Duration.minutes(15),
       memorySize: 512,
-      ...vpcParams,
+      vpc: vpc,
       logGroup: logGroup
     });
 
@@ -1045,7 +1048,7 @@ export class LlmGatewayStack extends cdk.Stack {
     });
   }
 
-  createQuotaHandlerApi(lb: elbv2.ApplicationLoadBalancer, appListener:elbv2.ApplicationListener, apiKeyTable: dynamodb.ITable, saltSecret: secretsmanager.ISecret, quotaTable: dynamodb.ITable, vpcParams: object, quotaHandlerEcr: ecr.IRepository, defaultQuotaParameter:ssm.StringParameter, ksmKey: kms.Key) {
+  createQuotaHandlerApi(lb: elbv2.ApplicationLoadBalancer, appListener:elbv2.ApplicationListener, apiKeyTable: dynamodb.ITable, saltSecret: secretsmanager.ISecret, quotaTable: dynamodb.ITable, vpc: ec2.Vpc, quotaHandlerEcr: ecr.IRepository, defaultQuotaParameter:ssm.StringParameter, ksmKey: kms.Key) {
     const logGroup = new logs.LogGroup(this, 'QuotaHandlerLogGroup', {
       logGroupName: 'QuotaHandlerLogGroup',
       removalPolicy: cdk.RemovalPolicy.DESTROY,
@@ -1073,7 +1076,7 @@ export class LlmGatewayStack extends cdk.Stack {
       },
       timeout: cdk.Duration.minutes(15),
       memorySize: 512,
-      ...vpcParams,
+      vpc: vpc,
       logGroup: logGroup
     });
 
@@ -1097,7 +1100,7 @@ export class LlmGatewayStack extends cdk.Stack {
     });
   }
 
-  createApiKeyHandlerApi(lb: elbv2.ApplicationLoadBalancer, appListener:elbv2.ApplicationListener, apiKeyTable: dynamodb.ITable, saltSecret: secretsmanager.ISecret, vpcParams: object, apiKeyEcr: ecr.IRepository, ksmKey: kms.Key) {
+  createApiKeyHandlerApi(lb: elbv2.ApplicationLoadBalancer, appListener:elbv2.ApplicationListener, apiKeyTable: dynamodb.ITable, saltSecret: secretsmanager.ISecret, vpc: ec2.Vpc, apiKeyEcr: ecr.IRepository, ksmKey: kms.Key) {
     const logGroup = new logs.LogGroup(this, 'ApiKeyHandlerLogGroup', {
       logGroupName: 'ApiKeyHandlerLogGroup',
       removalPolicy: cdk.RemovalPolicy.DESTROY,
@@ -1123,7 +1126,7 @@ export class LlmGatewayStack extends cdk.Stack {
       },
       timeout: cdk.Duration.minutes(15),
       memorySize: 512,
-      ...vpcParams,
+      vpc:vpc,
       logGroup: logGroup
     });
 
