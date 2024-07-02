@@ -58,4 +58,4 @@ async def embeddings(
     check_quota(user_name, api_key_name, embeddings_request.model)
     # Exception will be raised if model not supported.
     model = get_embeddings_model(embeddings_request.model)
-    return model.embed(embeddings_request)
+    return model.embed(embeddings_request, user_name, api_key_name)

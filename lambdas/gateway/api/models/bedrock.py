@@ -13,6 +13,8 @@ import numpy as np
 import requests
 import tiktoken
 from fastapi import HTTPException
+from collections.abc import Iterable
+from typing import Union
 
 from api.models.base import BaseChatModel, BaseEmbeddingsModel
 from api.schema import (
@@ -757,18 +759,28 @@ class CohereEmbeddingsModel(BedrockEmbeddingsModel):
         }
         return args
 
+    def get_length(self, input_value: Union[str, list[str], Iterable[Union[int, Iterable[int]]]]) -> int:
+        if isinstance(input_value, str) or isinstance(input_value, list):
+            # Directly return the length if it's a string or list of strings
+            return len(input_value)
+        elif isinstance(input_value, Iterable):
+            # If it's an Iterable, we need to handle it carefully
+            try:
+                # This will work for iterables that are also sized (like lists or tuples)
+                return len(input_value)
+            except TypeError:
+                # If it's a generator or other non-sized iterable, count manually
+                return sum(1 for _ in input_value)
+        else:
+            raise ValueError("Unsupported type")
+
+
     def embed(self, embeddings_request: EmbeddingsRequest, user_name:str, api_key_name:str) -> EmbeddingsResponse:
         response = self._invoke_model(
             args=self._parse_args(embeddings_request), model_id=embeddings_request.model
         )
         response_body = json.loads(response.get("body").read())
-
-        if isinstance(embeddings_request.input, list):
-            # If it is a list, sum the lengths of all strings in the list
-            total_length = sum(len(item) for item in embeddings_request.input)
-        else:
-            # If it is a single string, get its length
-            total_length = len(embeddings_request.input)
+        total_length = self.get_length(embeddings_request.input)
 
         #This model does not return the amount of tokens used. A rough estimate is characters divided by 4. Also, there is no charge for output tokens for embeddings models
         estimated_token_amount = total_length // 4
