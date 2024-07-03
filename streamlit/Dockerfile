@@ -13,6 +13,7 @@ COPY requirements.txt /app/
 WORKDIR /app
 RUN pip3 install --break-system-packages -r requirements.txt --no-cache-dir
 COPY app.py /app/
+COPY common.py /app/
 COPY invoke_llm_with_streaming.py /app/
 COPY data/cost_db.csv /app/data/
 COPY pages2/apikey_create.py /app/pages2/

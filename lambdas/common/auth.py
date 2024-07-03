@@ -65,7 +65,13 @@ def get_user_name(authorization_header, claims):
         return claims['username']
     user_info = get_user_info_cognito(authorization_header)
     print(f'user_info: {user_info}')
-    user_name = user_info["preferred_username"] if 'preferred_username' in user_info  else user_info["username"]
+    if "email" in user_info:
+        user_name = user_info['email']
+    elif "preferred_username" in user_info:
+        user_name = user_info['preferred_username']
+    else:
+        user_name = user_info["username"]
+
     print(f'user_name: {user_name}')
     return user_name
 

@@ -149,7 +149,12 @@ def query_by_api_key_hash(api_key_hash):
 def get_user_name(authorization_header):
     user_info = get_user_info_cognito(authorization_header)
     if user_info:
-        user_name = user_info["preferred_username"] if 'preferred_username' in user_info else user_info.get("username")
+        if "email" in user_info:
+            user_name = user_info['email']
+        elif "preferred_username" in user_info:
+            user_name = user_info['preferred_username']
+        else:
+            user_name = user_info["username"]
         return user_name
     return None
 

@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from st_pages import Page, show_pages, Section, add_indentation, hide_pages
 import json
 import jwt
+from common import get_username, no_username_string
 
 st.set_page_config(layout="wide")
 
@@ -74,15 +75,7 @@ def process_session_token():
 
 session_token = process_session_token()
 
-no_username_string = "Could not find username. Normal if you are running locally."
-if "username" in session_token:
-    if "GitHub_" in session_token["username"] and "preferred_username" in session_token:
-        username = session_token['preferred_username']
-    else:
-        username = session_token["username"]
-else:
-    username = no_username_string
-
+username = get_username(session_token)
 admin_list = os.environ["AdminList"].split(",") if "AdminList" in os.environ  else []
 
 if username not in admin_list and username != no_username_string:

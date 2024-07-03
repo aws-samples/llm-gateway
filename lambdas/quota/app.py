@@ -1,3 +1,4 @@
+from urllib.parse import unquote
 import boto3
 import json
 import logging
@@ -133,6 +134,8 @@ def lambda_handler(event, context):
 
     query_params = event.get('queryStringParameters') or {}  # Use an empty dict as a default
     username = query_params.get('username', None)
+    if username:
+        username = unquote(username)
 
     response = {"statusCode": 200}
 
