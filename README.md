@@ -174,6 +174,21 @@ To add a new Bedrock Model to the LLM Gateway API, you must do the following:
 1. Add it to the list of supported models in `lambdas/gateway/api/models/bedrock.py`, in the `_supported_models` variable
 2. Add the new model's pricing information to the pricing config in `lambdas/gateway/api/data/cost_db.csv`
 
+Note: you can see the list of models that Bedrock supports by using `aws bedrock list-foundation-models` <a href="https://awscli.amazonaws.com/v2/documentation/api/latest/reference/bedrock/list-foundation-models.html" target="_blank">Documentation</a>
+
+## Load Testing
+
+This repo has some load testing scripts. These currently are only set up to be used with pure Cognito (without AzureAd or Github Auth enabled). Do the following to perform load testing:
+
+1. Make sure `BENCHMARK_MODE` is set to `true` in your deployment config file. Benchmark mode deploys a fake Bedrock server and points the LLMGateway at it. This is useful if you want to test the scalability of the LLMGateway beyond your current Bedrock quota limits.
+2. Also make sure that `METADATA_URL_COPIED_FROM_AZURE_AD`, `GIT_HUB_CLIENT_ID`, `GIT_HUB_CLIENT_SECRET`, and `GIT_HUB_PROXY_URL` are all empty.
+3. Redeploy if needed.
+4. Go to the `/load_testing` folder
+5. Create a `config.json` file based on the `config.template.json`. You can get the `client_secret` by going to your userpool in Amazon Cognito in the AWS Console, going to the `App Integration` tab, clicking on the `ApplicationLoadBalancerClient` at the bottom of the page, and then copying the `Client secret`
+6. Run `python3 create_cognito_users.py <Number of desired users>`. This will create Cognito users which will call the LLM Gateway during the load test 
+7. Run `python3 create_api_keys.py`. This will create LLM Gateway API keys for each of your created Cognito users
+8. Run `locust -f llm_gateway_load_testing.py --headless -u  <Number of desired users> -r <Number of users to instantiate per second> --run-time <Runtime e.g. 1h>`. See <a href="https://docs.locust.io/en/stable/" target="_blank">Locust Documentation</a> for more details
+
 ## Security
 See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
 
