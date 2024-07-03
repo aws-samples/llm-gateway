@@ -1,3 +1,4 @@
+from urllib.parse import unquote
 import boto3
 import datetime
 import json
@@ -175,6 +176,8 @@ def lambda_handler(event, context):
         # Handle DELETE request
         params = event.get('queryStringParameters', {})
         api_key_name = params.get('api_key_name')
+        if api_key_name:
+            api_key_name = unquote(api_key_name)
         if not api_key_name:
             return {
                 "statusCode": 400,

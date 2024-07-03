@@ -18,3 +18,4 @@ lambdas/quota/common
 load_testing/config.json
 load_testing/users.txt
 load_testing/api_keys.txt
+ash_output/**
