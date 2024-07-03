@@ -61,6 +61,7 @@ export class LlmGatewayStack extends cdk.Stack {
   benchmarkRepoName = this.node.tryGetContext("benchmarkRepoName");
   llmGatewayInstanceCount = parseInt(this.node.tryGetContext("llmGatewayInstanceCount"));
   llmGatewayVcpus = parseInt(this.node.tryGetContext("llmGatewayVcpus"));
+  storeRequestDetailsInDynamo = String(this.node.tryGetContext("storeRequestDetailsInDynamo")).toLowerCase() == "true";
 
   apiKeyValueHashIndex = "ApiKeyValueHashIndex";
   apiKeyTableName = "ApiKeyTable";
@@ -657,7 +658,8 @@ export class LlmGatewayStack extends cdk.Stack {
       DEBUG: this.debug,
       ENABLED_MODELS: this.enabledModels,
       BENCHMARK_MODE: String(this.benchmarkMode),
-      LLM_GATEWAY_URL: LlmGatewayUrl
+      LLM_GATEWAY_URL: LlmGatewayUrl,
+      STORE_REQUEST_DETAILS_IN_DYNAMO: String(this.storeRequestDetailsInDynamo)
     }
 
     // Create a Security Group for the private ALB that only allows traffic from within the VPC

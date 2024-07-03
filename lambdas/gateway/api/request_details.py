@@ -7,7 +7,9 @@ import decimal
 from api.clients import get_dynamo_db_client
 
 REQUEST_DETAILS_TABLE_NAME = os.environ.get("REQUEST_DETAILS_TABLE_NAME")
+STORE_REQUEST_DETAILS_IN_DYNAMO = os.environ.get("STORE_REQUEST_DETAILS_IN_DYNAMO").lower() == "true"
 
+print(f'STORE_REQUEST_DETAILS_IN_DYNAMO: {STORE_REQUEST_DETAILS_IN_DYNAMO}')
 dynamodb = get_dynamo_db_client()
 table = dynamodb.Table(REQUEST_DETAILS_TABLE_NAME)
 logger = logging.getLogger(__name__)
@@ -42,7 +44,8 @@ def create_request_detail(username, api_key_name, estimated_cost, input_tokens, 
 
         print(log_item)
 
-    dynamo_response = table.put_item(
-            Item=item
-    )
+    if STORE_REQUEST_DETAILS_IN_DYNAMO:
+        dynamo_response = table.put_item(
+                Item=item
+        )
     #print("Item created successfully:", dynamo_response)

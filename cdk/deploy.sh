@@ -95,6 +95,7 @@ echo $DEFAULT_MODEL_ACCESS
 echo $ECR_MODEL_ACCESS_REPOSITORY
 echo $ENABLED_MODELS
 echo $BENCHMARK_MODE
+echo $STORE_REQUEST_DETAILS_IN_DYNAMO
 cd ../streamlit
 ./build_and_deploy.sh $ECR_STREAMLIT_REPOSITORY
 
@@ -132,6 +133,7 @@ cdk deploy "$STACK_NAME" \
 --context benchmarkRepoName=$ECR_BENCHMARK_REPOSITORY \
 --context llmGatewayInstanceCount=$LLM_GATEWAY_INSTANCE_COUNT \
 --context llmGatewayVcpus=$LLM_GATEWAY_VCPUS \
+--context storeRequestDetailsInDynamo=$STORE_REQUEST_DETAILS_IN_DYNAMO \
 --outputs-file ./outputs.json
 
 # Check if the deployment was successful
