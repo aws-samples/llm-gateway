@@ -187,7 +187,7 @@ This repo has some load testing scripts. These currently are only set up to be u
 5. Create a `config.json` file based on the `config.template.json`. You can get the `client_secret` by going to your userpool in Amazon Cognito in the AWS Console, going to the `App Integration` tab, clicking on the `ApplicationLoadBalancerClient` at the bottom of the page, and then copying the `Client secret`
 6. Run `python3 create_cognito_users.py <Number of desired users>`. This will create Cognito users which will call the LLM Gateway during the load test 
 7. Run `python3 create_api_keys.py`. This will create LLM Gateway API keys for each of your created Cognito users
-8. Run `locust -f llm_gateway_load_testing.py --headless -u  <Number of desired users> -r <Number of users to instantiate per second> --run-time <Runtime e.g. 1h>`
+8. Run `locust -f llm_gateway_load_testing.py --headless -u  <Number of desired users> -r <Number of users to instantiate per second> --run-time <Runtime e.g. 1h>`. See <a href="https://docs.locust.io/en/stable/" target="_blank">Locust Documentation</a> for more details
 
 ## Security
 See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
