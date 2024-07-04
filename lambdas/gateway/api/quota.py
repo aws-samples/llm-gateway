@@ -11,6 +11,7 @@ import decimal
 from datetime import datetime, timezone, date, timedelta
 from api.request_details import create_request_detail
 from api.clients import get_dynamo_db_client
+import threading
 
 DEFAULT_QUOTA_PARAMETER_NAME = os.environ.get("DEFAULT_QUOTA_PARAMETER_NAME")
 QUOTA_TABLE_NAME = os.environ.get("QUOTA_TABLE_NAME")
@@ -22,6 +23,7 @@ quota_table = dynamodb.Table(QUOTA_TABLE_NAME)
 
 cache = TTLCache(maxsize=10000, ttl=1200)
 default_quota_cache = TTLCache(maxsize=1, ttl=1200)
+quota_usage_cache = TTLCache(maxsize=10000, ttl=1200)
 
 cost_df = pd.read_csv('/app/api/data/cost_db.csv', dtype={'cost_per_token_input': float, 'cost_per_token_output': float})
 #print(f'cost_df: {cost_df}')
@@ -176,7 +178,11 @@ def get_user_quota_config(user_name):
         return quota_config_document.get('quota_map', None)
 
 def get_user_requests_summary(user_name):
-    return get_user_document(user_name, "requests_summary")
+    requests_summary = get_from_quota_usage_cache(user_name)
+    if not requests_summary:
+        requests_summary = get_user_document(user_name, "requests_summary")
+        add_to_quota_usage_cache(user_name, requests_summary)
+    return requests_summary
 
 def get_user_document(user_name, document_type):    
     document_type_id = f'{document_type}:{user_name}'
@@ -192,6 +198,13 @@ def get_user_document(user_name, document_type):
         return None
 
     return response["Items"][0]
+
+
+def get_from_quota_usage_cache(key):
+    return quota_usage_cache.get(key, None)
+
+def add_to_quota_usage_cache(key, value):
+    quota_usage_cache[key] = value
 
 def add_to_cache(key, value):
     cache[key] = value
@@ -227,7 +240,7 @@ def calculate_cost(num_tokens, model, cost_type):
     costs_per_token = filtered_df.iloc[0][cost_type]
     return (num_tokens * costs_per_token) / 1000
 
-def update_quota(user_name, total_cost):
+def update_quota_dynamo(user_name, total_cost):
     keys = {
         'username': user_name,  # Partition Key
         'document_type_id': f'requests_summary:{user_name}'    # Sort Key
@@ -258,3 +271,45 @@ def update_quota(user_name, total_cost):
         #print("Update succeeded:", response)
     except Exception as e:
         print("Error updating item:", e)
+
+# Shared dictionary for user data
+user_data = {}
+
+# Dictionary to store locks for each user
+user_locks = {}
+
+# Global lock to protect creation of new user-specific locks
+global_lock = threading.Lock()
+
+# Helper function to get a lock for a user
+def get_lock_for_user(username):
+    if username not in user_locks:
+        # Acquire global lock to safely create a new user lock
+        with global_lock:
+            if username not in user_locks:  # Double-check after acquiring the lock
+                user_locks[username] = threading.Lock()
+    return user_locks[username]
+
+# Background task to process each user
+def write_quota_updates_to_dynamo():
+    # Iterate through a copy of usernames to avoid runtime changes issues
+    usernames = list(user_data.keys())
+    for username in usernames:
+        user_lock = get_lock_for_user(username)
+        with user_lock:
+            if username in user_data:
+                # Process the user's data here
+                if user_data[username] == 0:
+                    continue
+                update_quota_dynamo(username, user_data[username])
+                # Reset the user's value to 0 after processing
+                user_data[username] = 0
+
+
+def update_quota_local(username: str, increment: float):
+    user_lock = get_lock_for_user(username)
+    with user_lock:
+        if username in user_data:
+            user_data[username] += increment
+        else:
+            user_data[username] = increment

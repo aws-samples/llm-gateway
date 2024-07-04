@@ -41,7 +41,7 @@ from api.schema import (
     Embedding,
 )
 from api.setting import DEBUG, AWS_REGION
-from api.quota import calculate_input_cost, calculate_output_cost, update_quota
+from api.quota import calculate_input_cost, calculate_output_cost, update_quota_local
 from api.request_details import create_request_detail
 
 logger = logging.getLogger(__name__)
@@ -236,7 +236,7 @@ class BedrockModel(BaseChatModel):
         #print(f'usage.completion_tokens: {usage.completion_tokens} output_cost: {output_cost}')
         total_cost = input_cost + output_cost
         #print(f'total_cost: {total_cost}')
-        update_quota(user_name, total_cost)
+        update_quota_local(user_name, total_cost)
         create_request_detail(user_name, api_key_name, total_cost, input_tokens, output_tokens, chat_request.model, "Success")
 
         chat_response = self._create_response(
@@ -273,7 +273,7 @@ class BedrockModel(BaseChatModel):
                 #print(f'usage.completion_tokens: {usage.completion_tokens} output_cost: {output_cost}')
                 total_cost = input_cost + output_cost
                 #print(f'total_cost: {total_cost}')
-                update_quota(user_name, total_cost)
+                update_quota_local(user_name, total_cost)
                 create_request_detail(user_name, api_key_name, total_cost, usage.prompt_tokens, usage.completion_tokens, chat_request.model, "Success")
                 # An empty choices for Usage as per OpenAI doc below:
                 # if you set stream_options: {"include_usage": true}.
@@ -786,7 +786,7 @@ class CohereEmbeddingsModel(BedrockEmbeddingsModel):
         estimated_token_amount = total_length // 4
         input_cost = calculate_input_cost(estimated_token_amount, embeddings_request.model)
 
-        update_quota(user_name, input_cost)
+        update_quota_local(user_name, input_cost)
         create_request_detail(user_name, api_key_name, input_cost, estimated_token_amount, 0.0, embeddings_request.model, "Success")
         return self._create_response(
             embeddings=response_body["embeddings"],

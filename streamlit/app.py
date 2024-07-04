@@ -98,7 +98,7 @@ session_token = process_session_token()
 access_token = process_access_token()
 #st.write(f'access_token: {access_token}')
 
-st.write(session_token)
+#st.write(session_token)
 username = get_username(session_token)
 
 admin_list = os.environ["AdminList"].split(",") if "AdminList" in os.environ  else []
