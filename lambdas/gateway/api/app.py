@@ -1,5 +1,6 @@
 import logging
 
+from api.quota import write_quota_updates_to_dynamo
 import uvicorn
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
@@ -8,13 +9,18 @@ from fastapi.responses import PlainTextResponse
 from mangum import Mangum
 from contextlib import asynccontextmanager
 from anyio import to_thread
+from apscheduler.schedulers.background import BackgroundScheduler
 
 from api.routers import model, chat, embeddings
 from api.setting import API_ROUTE_PREFIX, TITLE, DESCRIPTION, SUMMARY, VERSION
 
+scheduler = BackgroundScheduler()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     to_thread.current_default_thread_limiter().total_tokens = 1000
+    scheduler.add_job(write_quota_updates_to_dynamo, 'interval', minutes=10)
+    scheduler.start()
     yield
 
 config = {
