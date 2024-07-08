@@ -33,16 +33,16 @@ def create_request_detail(username, api_key_name, estimated_cost, input_tokens, 
         item['input_tokens'] = decimal.Decimal(str(input_tokens))
     if output_tokens:
         item['output_tokens'] = decimal.Decimal(str(output_tokens))
-    if DEBUG:
-        log_item = item.copy()
-        if 'estimated_cost' in log_item:
-            log_item['estimated_cost'] = f"{float(log_item['estimated_cost']):.15f}"
-        if 'input_tokens' in log_item:
-            log_item['input_tokens'] = float(log_item['input_tokens'])
-        if 'output_tokens' in log_item:
-            log_item['output_tokens'] = float(log_item['output_tokens'])
 
-        print(log_item)
+    log_item = item.copy()
+    if 'estimated_cost' in log_item:
+        log_item['estimated_cost'] = f"{float(log_item['estimated_cost']):.15f}"
+    if 'input_tokens' in log_item:
+        log_item['input_tokens'] = float(log_item['input_tokens'])
+    if 'output_tokens' in log_item:
+        log_item['output_tokens'] = float(log_item['output_tokens'])
+
+    print(log_item)
 
     if STORE_REQUEST_DETAILS_IN_DYNAMO:
         dynamo_response = table.put_item(
