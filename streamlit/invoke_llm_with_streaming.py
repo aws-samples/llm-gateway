@@ -46,15 +46,22 @@ async def llm_answer_streaming(question, model, access_token):
             max_tokens=1000,
             temperature=1,
             n=1,
-            stream=True
+            stream=True,
+            stream_options={"include_usage": True},
         )
         # ToDo: Restore chat_id functionality to support server side history
         # print(f'Assigning chat id: {response_json.get("chat_id")}')
         # thread_safe_session_state.set("chat_id", response_json.get("chat_id"))
         async for chunk in stream:
             try:
-                yield chunk.choices[0].delta.content if chunk.choices[0].finish_reason != "stop" else ''
-            except:
+                if chunk.usage:
+                    thread_safe_session_state.set("prompt_tokens", chunk.usage.prompt_tokens)
+                    thread_safe_session_state.set("completion_tokens", chunk.usage.completion_tokens)
+                    yield ''
+                else:
+                    yield chunk.choices[0].delta.content if chunk.choices[0].finish_reason != "stop" else ''
+            except Exception as e:
+                print(f'Error: {e}')
                 yield 'Error while processing the response!'
     except openai.APIError as e:
         if e.status_code == 429:
