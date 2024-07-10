@@ -142,7 +142,7 @@ def estimate_cost(
     model: str,
     region: str,
     type_: str,
-    string: str,
+    n_tokens: str,
     use_cache:bool=False,
 ) -> float:
     if type_ not in ["input", "output"]:
@@ -179,8 +179,6 @@ def estimate_cost(
             cost_per_token = cost_per_k_tokens / 1000
     else:  # Lookup in DDB
         raise NotImplemented()
-
-    n_tokens = len(get_estimated_tokens(string))
 
     return cost_per_token * n_tokens
 
@@ -263,16 +261,16 @@ def sync_generator(sync_queue):
         yield item
 
 
-def update_metrics(s, type_):
+def update_metrics(model, n_tokens, type_):
     print(metrics)
     #Needed for switching models and refreshes to work correctly
-    if s:
-        metrics[f"n_{type_}_tokens"] = len(get_estimated_tokens(s))
+    if n_tokens:
+        metrics[f"n_{type_}_tokens"] = n_tokens
         metrics[f"{type_}_cost"] = estimate_cost(
-            "anthropic.claude-instant",
-            "us-east-1",
+            model,
+            region,
             type_,
-            s,
+            n_tokens,
             use_cache=True
         )
     else:
@@ -371,11 +369,7 @@ with main_column:
             q = queue.Queue()
 
             if has_quota():
-                # Update the input metrics.
-                update_metrics(st.session_state.prompt, "input")
-
                 # Start the background thread
-
                 print(f'st.session_state.model_id: {st.session_state.model_id}')
                 print(f'st.session_state.provider_id: {st.session_state.provider_id}')
                 thread = threading.Thread(
@@ -402,7 +396,11 @@ with main_column:
             # appending the final answer to the session state
             if "answer" in st.session_state:
                 if has_quota():
-                    update_metrics(st.session_state.answer, "output")
+                    if thread_safe_session_state.get("prompt_tokens"):
+                        update_metrics(st.session_state.model_id, thread_safe_session_state.get("prompt_tokens"), "input")
+                    if thread_safe_session_state.get("completion_tokens"):
+                        update_metrics(st.session_state.model_id, thread_safe_session_state.get("completion_tokens"), "output")
+
                     print(st.session_state.estimated_usage)
                     st.session_state.estimated_usage += metrics["input_cost"]
                     st.session_state.estimated_usage += metrics["output_cost"]
