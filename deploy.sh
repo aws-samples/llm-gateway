@@ -1,10 +1,5 @@
 #!/bin/bash
 
-# Create 2 certificates and register them with Route53.
-cd cdk
-cdk deploy --app "certs"
-cd ..
-
 # Run the main deployment script to create cloud infrastructure
 cd cdk
 . ./deploy.sh
