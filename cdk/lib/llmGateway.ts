@@ -251,7 +251,7 @@ export class LlmGatewayStack extends cdk.Stack {
   }
 
   createApiKeyLambdaRole(
-    roleName: string, 
+    roleName: string,
     apiKeyTable: dynamodb.ITable,
     apiKeyValueHashIndex: string,
     secret: secretsmanager.ISecret,
@@ -323,7 +323,7 @@ export class LlmGatewayStack extends cdk.Stack {
   }
 
   createQuotaLambdaRole(
-    roleName: string, 
+    roleName: string,
     quotaTable: dynamodb.ITable,
     defaultQuotaParameter:ssm.StringParameter,
     apiKeyTable: dynamodb.ITable,
@@ -402,7 +402,7 @@ export class LlmGatewayStack extends cdk.Stack {
   }
 
   createModelAccessLambdaRole(
-    roleName: string, 
+    roleName: string,
     modelAccessTable: dynamodb.ITable,
     defaultModelAccessParameter:ssm.StringParameter,
     apiKeyTable: dynamodb.ITable,
@@ -598,7 +598,7 @@ export class LlmGatewayStack extends cdk.Stack {
       this.apiKeyTableName,
       this.apiKeyTablePartitionKey,
       this.apiKeyTableSortKey,
-      this.apiKeyValueHashIndex, 
+      this.apiKeyValueHashIndex,
       this.apiKeyTableIndexPartitionKey,
       kmsKey
     )
@@ -679,7 +679,7 @@ export class LlmGatewayStack extends cdk.Stack {
       vpc,
       clusterName: llmGatewayEcsCluster,
       containerInsights:true,
-      
+
     });
 
     new cdk.CfnOutput(this, 'LlmgatewayEcsCluster', {
@@ -689,7 +689,7 @@ export class LlmGatewayStack extends cdk.Stack {
 
     if (this.serverlessApi) {
       const lambdaRole = this.createLlmGatewayRole(
-        "llmGatewayLambdaRole",
+        `${this.stackPrefix}llmGatewayLambdaRole`,
         quotaTable,
         modelAccessTable,
         requestDetailsTable,
@@ -733,7 +733,7 @@ export class LlmGatewayStack extends cdk.Stack {
       });
 
       const ecsExecutionRole = this.createLlmGatewayRole(
-        "llmGatewayEcsRole",
+        `${this.stackPrefix}EcsRole`,
         quotaTable,
         modelAccessTable,
         requestDetailsTable,
@@ -796,7 +796,7 @@ export class LlmGatewayStack extends cdk.Stack {
         minCapacity: this.llmGatewayInstanceCount,
         maxCapacity: 10,
       });
-      
+
       scaling.scaleOnCpuUtilization('CpuScaling', {
         targetUtilizationPercent: 75,
         scaleInCooldown: cdk.Duration.seconds(60),
@@ -860,7 +860,7 @@ export class LlmGatewayStack extends cdk.Stack {
       cdk.Tags.of(logGroup).add("Group", 'Fake')
 
       const ecsBenchmarkExecutionRole = this.createLlmGatewayRole(
-        "benchmarkEcsRole",
+        `${this.stackPrefix}benchmarkEcsRole`,
         quotaTable,
         modelAccessTable,
         requestDetailsTable,
@@ -1004,11 +1004,11 @@ export class LlmGatewayStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       encryptionKey: ksmKey
     });
-    
+
     const modelAccessHandler = new lambda.DockerImageFunction(this, 'modelAccessHandler', {
       functionName: this.modelAccessHandlerFunctionName,
       code: lambda.DockerImageCode.fromEcr(modelAccessEcr, { tag: "latest" }),
-      role: this.createModelAccessLambdaRole("modelAccessHandlerRole", modelAccessTable, defaultModelAccessParameter, apiKeyTable, this.apiKeyValueHashIndex, saltSecret, ksmKey),
+      role: this.createModelAccessLambdaRole(`${this.stackPrefix}modelAccessHandlerRole`, modelAccessTable, defaultModelAccessParameter, apiKeyTable, this.apiKeyValueHashIndex, saltSecret, ksmKey),
       architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
       environment: {
         REGION: this.regionValue,
@@ -1060,7 +1060,7 @@ export class LlmGatewayStack extends cdk.Stack {
     const quotaHandler = new lambda.DockerImageFunction(this, 'quotaHandler', {
       functionName: this.quotaHandlerFunctionName,
       code: lambda.DockerImageCode.fromEcr(quotaHandlerEcr, { tag: "latest" }),
-      role: this.createQuotaLambdaRole("quotaHandlerRole", quotaTable, defaultQuotaParameter, apiKeyTable, this.apiKeyValueHashIndex, saltSecret, ksmKey),
+      role: this.createQuotaLambdaRole(`${this.stackPrefix}quotaHandlerRole`, quotaTable, defaultQuotaParameter, apiKeyTable, this.apiKeyValueHashIndex, saltSecret, ksmKey),
       architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
       environment: {
         REGION: this.regionValue,
@@ -1108,11 +1108,11 @@ export class LlmGatewayStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       encryptionKey: ksmKey
     });
-    
+
     const apiKeyHandler = new lambda.DockerImageFunction(this, 'apiKeyHandler', {
       functionName: this.apiKeyHandlerFunctionName,
       code: lambda.DockerImageCode.fromEcr(apiKeyEcr, { tag: "latest" }),
-      role: this.createApiKeyLambdaRole("apiKeyHandlerRole", apiKeyTable, this.apiKeyValueHashIndex, saltSecret, ksmKey),
+      role: this.createApiKeyLambdaRole(`${this.stackPrefix}apiKeyHandlerRole`, apiKeyTable, this.apiKeyValueHashIndex, saltSecret, ksmKey),
       architecture: this.architecture == "x86" ? lambda.Architecture.X86_64 : lambda.Architecture.ARM_64,
       environment: {
         API_KEY_TABLE_NAME: apiKeyTable.tableName,
