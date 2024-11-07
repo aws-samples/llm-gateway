@@ -12,5 +12,5 @@ cd ..
 
 # Create a Cognito admin user
 cd scripts
-python scripts/create_cognito_user.py -u "admin" -p "Password123!"
+python create_cognito_user.py -u "admin" -p "Password123!"
 cd ..
