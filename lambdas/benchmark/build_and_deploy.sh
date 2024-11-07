@@ -41,7 +41,9 @@ esac
 echo $ARCH
 
 aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
-docker buildx create --name single-platform-builder --driver docker-container --append
+if ! docker buildx inspect single-platform-builder >/dev/null 2>&1; then
+    docker buildx create --name single-platform-builder --driver docker-container
+fi
 docker buildx build --builder single-platform-builder --platform $ARCH --load -t $APP_NAME .
 docker tag $APP_NAME\:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$APP_NAME\:latest
 docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$APP_NAME\:latest
