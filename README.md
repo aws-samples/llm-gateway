@@ -1,6 +1,8 @@
 # AWS LLM Gateway
 
-Project ACTIVE as of Oct 22, 2024
+Project DEPRECATED as of December 20, 2024
+
+Please check out genai-gateway here: https://github.com/aws-samples/genai-gateway  (This new project is built on top of LiteLLM, enabling us to provide a much larger list of features to our users. We are considering it to be llm-gateway 2.0, and it is actively under development)
 
 ## Project Overview
 
